@@ -70,6 +70,17 @@ Admins manage people under **Users** in the sidebar (`/admin/users`):
 
 Every rule is enforced on the server for each page and each save, so hiding a button is never the only protection.
 
+## Guided tour
+
+New users get a step-by-step tour on their first sign-in. It spotlights each part of the app, asks them to click each tab, and explains what they're looking at. It only shows sections the person has access to. Finishing or skipping is remembered per user, across devices; **Take the tour** in the sidebar replays it. Steps live in `src/lib/tour-steps.ts`.
+
+To show the tour to someone again, unset `tourCompletedAt` on their `users` document.
+
+## Performance notes
+
+- `vercel.json` pins server functions to **Mumbai (`bom1`)**, next to the Atlas cluster (AWS ap-south-1). If the database ever moves region, change this too; every query crosses the gap.
+- Indexes are created once and recorded in `_meta`. Bump `SCHEMA_VERSION` in `src/lib/db/collections.ts` when you change `ensureIndexes()`.
+
 ## Operations
 
 - **Revoke all sessions for a user:** reset their password, deactivate them, or increment `tokenVersion` on their `users` document.

@@ -33,12 +33,17 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   let landing = "/overview";
 
   try {
-    if ((await isLockedOut(userIpKey, LIMITS.userIp)) || (await isLockedOut(userKey, LIMITS.user))) {
+    const { users } = await collections();
+    // Independent lookups in one round trip.
+    const [lockedIp, lockedUser, user] = await Promise.all([
+      isLockedOut(userIpKey, LIMITS.userIp),
+      isLockedOut(userKey, LIMITS.user),
+      users.findOne({ username }),
+    ]);
+    if (lockedIp || lockedUser) {
       return { message: "Too many failed attempts. Try again in 15 minutes.", values: { username } };
     }
 
-    const { users } = await collections();
-    const user = await users.findOne({ username });
     const ok = await verifyPassword(password, user?.active ? user.passwordHash : undefined);
 
     if (!ok || !user) {
@@ -46,23 +51,20 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
       return { message: GENERIC_ERROR, values: { username } };
     }
 
-    await Promise.all([
-      clearFailures(userIpKey),
-      users.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } }),
-    ]);
     const principal = {
       id: user._id.toHexString(),
       username: user.username,
       role: user.role,
       permissions: effectivePermissions(user.role, user.permissions),
+      tourDone: Boolean(user.tourCompletedAt),
     };
-    await createSession({ sub: principal.id, username: user.username, tv: user.tokenVersion });
+    await Promise.all([
+      createSession({ sub: principal.id, username: user.username, tv: user.tokenVersion }),
+      clearFailures(userIpKey),
+      users.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } }),
+      writeAudit({ user: principal, action: "login", entity: "auth" }),
+    ]);
     landing = homePath(principal);
-    await writeAudit({
-      user: principal,
-      action: "login",
-      entity: "auth",
-    });
   } catch (err) {
     console.error("[login] failed", err);
     return { message: "Sign-in is temporarily unavailable. Please try again.", values: { username } };

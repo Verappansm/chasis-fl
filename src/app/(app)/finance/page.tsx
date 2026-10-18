@@ -37,7 +37,7 @@ export default function FinancePage({ searchParams }: PageProps<"/finance">) {
         description="Loan cases, finance incentive (payout) tracking and vehicle margin per chassis."
         action={
           <IfCan permission="finance:edit">
-            <LinkButton href="/finance/new">New finance case</LinkButton>
+            <LinkButton href="/finance/new" tour="new-record">New finance case</LinkButton>
           </IfCan>
         }
       />
@@ -60,7 +60,7 @@ async function FinanceList({ searchParams }: { searchParams: PageProps<"/finance
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} deleted={one(sp.deleted) === "1"} />
-      <Card>
+      <Card tour="finance-list">
         <ListToolbar basePath="/finance" q={q} status={status} statuses={STATUSES} placeholder="Search chassis or provider" />
         {result.items.length === 0 ? (
           <EmptyState title="No finance cases found">{q ? "Try a different search." : "Create the first finance case."}</EmptyState>

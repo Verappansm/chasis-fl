@@ -69,7 +69,7 @@ async function Overview() {
 
   return (
     <div className="space-y-8">
-      <section aria-labelledby="h-income">
+      <section aria-labelledby="h-income" data-tour="ov-income">
         <h2 id="h-income" className="mb-3 text-sm font-semibold text-slate-700">
           Incentive income
         </h2>
@@ -100,7 +100,7 @@ async function Overview() {
         </div>
       </section>
 
-      <section aria-labelledby="h-owed">
+      <section aria-labelledby="h-owed" data-tour="ov-owed">
         <h2 id="h-owed" className="mb-3 text-sm font-semibold text-slate-700">
           Still owed to us
         </h2>
@@ -147,7 +147,7 @@ async function Overview() {
       </section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card>
+        <Card tour="ov-chase">
           <div className="border-b border-slate-200 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-900">Pending incentive by provider</h2>
             <p className="text-xs text-slate-500">Who to chase first. Total pending: {formatMoney(totalPending)}{totalAged ? `, ${totalAged} aged` : ""}.</p>
@@ -177,7 +177,7 @@ async function Overview() {
           )}
         </Card>
 
-        <Card>
+        <Card tour="ov-activity">
           <div className="border-b border-slate-200 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-900">Recent activity</h2>
           </div>

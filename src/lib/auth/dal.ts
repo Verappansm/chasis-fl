@@ -10,6 +10,8 @@ import { SESSION_COOKIE, verifySession } from "./token";
 export interface CurrentUser extends Principal {
   id: string;
   username: string;
+  /** Has finished or skipped the guided tour. */
+  tourDone: boolean;
 }
 
 /**
@@ -26,7 +28,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const { users } = await collections();
   const user = await users.findOne(
     { _id: new ObjectId(session.sub) },
-    { projection: { username: 1, role: 1, permissions: 1, active: 1, tokenVersion: 1 } },
+    { projection: { username: 1, role: 1, permissions: 1, active: 1, tokenVersion: 1, tourCompletedAt: 1 } },
   );
   if (!user || !user.active || user.tokenVersion !== session.tv) return null;
 
@@ -36,6 +38,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     username: user.username,
     role,
     permissions: effectivePermissions(role, user.permissions),
+    tourDone: Boolean(user.tourCompletedAt),
   };
 });
 

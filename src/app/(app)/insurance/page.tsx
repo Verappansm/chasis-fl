@@ -37,7 +37,7 @@ export default function InsurancePage({ searchParams }: PageProps<"/insurance">)
         description="Policies sold per chassis and the commission (incentive) due from insurers."
         action={
           <IfCan permission="insurance:edit">
-            <LinkButton href="/insurance/new">New policy</LinkButton>
+            <LinkButton href="/insurance/new" tour="new-record">New policy</LinkButton>
           </IfCan>
         }
       />
@@ -60,7 +60,7 @@ async function InsuranceList({ searchParams }: { searchParams: PageProps<"/insur
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} deleted={one(sp.deleted) === "1"} />
-      <Card>
+      <Card tour="insurance-list">
         <ListToolbar
           basePath="/insurance"
           q={q}

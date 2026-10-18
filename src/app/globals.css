@@ -9,3 +9,18 @@
 :root {
   color-scheme: light;
 }
+
+/* Guided tour spotlight: a bright outline plus a dimmed page; click-to-continue steps pulse. */
+.tour-spot {
+  box-shadow: 0 0 0 3px #818cf8, 0 0 0 9999px rgb(2 6 23 / 0.6);
+}
+.tour-spot-pulse {
+  animation: tour-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px #818cf8, 0 0 0 3px rgb(129 140 248 / 0.6), 0 0 0 9999px rgb(2 6 23 / 0.6); }
+  50% { box-shadow: 0 0 0 3px #a5b4fc, 0 0 0 12px rgb(129 140 248 / 0), 0 0 0 9999px rgb(2 6 23 / 0.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot-pulse { animation: none; }
+}

@@ -48,7 +48,7 @@ export default function RenewalsPage({ searchParams }: PageProps<"/renewals">) {
         description="Insurance renewal follow-ups, so recurring commission is not lost to competitors."
         action={
           <IfCan permission="renewals:edit">
-            <LinkButton href="/renewals/new">New renewal case</LinkButton>
+            <LinkButton href="/renewals/new" tour="new-record">New renewal case</LinkButton>
           </IfCan>
         }
       />
@@ -68,7 +68,7 @@ async function Expiring() {
   const policies = await upcomingExpiries(45);
   if (!policies.length) return null;
   return (
-    <Card className="mb-6 border-amber-200">
+    <Card className="mb-6 border-amber-200" tour="renewals-expiring">
       <div className="border-b border-amber-100 bg-amber-50/60 px-4 py-3">
         <h2 className="text-sm font-semibold text-amber-900">Policies expiring soon without a renewal case</h2>
         <p className="text-xs text-amber-800">Expiring within 45 days (or lapsed in the last 15) and not yet followed up.</p>
@@ -127,7 +127,7 @@ async function RenewalList({ searchParams }: { searchParams: PageProps<"/renewal
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} deleted={one(sp.deleted) === "1"} />
-      <Card>
+      <Card tour="renewals-list">
         <ListToolbar basePath="/renewals" q={q} status={status} statuses={STATUSES} placeholder="Search chassis or notes" />
         {result.items.length === 0 ? (
           <EmptyState title="No renewal cases found" />

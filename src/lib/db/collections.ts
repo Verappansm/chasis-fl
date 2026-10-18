@@ -87,16 +87,30 @@ async function bootstrapAdmin(c: Collections) {
   );
 }
 
+/**
+ * Bump when ensureIndexes() changes. Each cold start then costs one findOne
+ * instead of re-issuing every createIndex (which is slow on Atlas).
+ */
+const SCHEMA_VERSION = 1;
+
+async function ensureSchema(db: Db, c: Collections) {
+  const meta = db.collection<{ _id: string; version: number; at: Date }>("_meta");
+  const current = await meta.findOne({ _id: "schema" });
+  if (current && current.version >= SCHEMA_VERSION) return;
+  await ensureIndexes(c);
+  await meta.updateOne({ _id: "schema" }, { $set: { version: SCHEMA_VERSION, at: new Date() } }, { upsert: true });
+}
+
 const globalForSetup = globalThis as unknown as { _chasisSetup?: Promise<void> };
 
-/** Typed collections. Indexes and the admin bootstrap run once per server instance. */
+/** Typed collections. Schema check and admin bootstrap run once per server instance. */
 export async function collections(): Promise<Collections> {
-  const c = bind(await getDb());
+  const db = await getDb();
+  const c = bind(db);
   if (!globalForSetup._chasisSetup) {
-    globalForSetup._chasisSetup = (async () => {
-      await ensureIndexes(c);
-      await bootstrapAdmin(c);
-    })().catch((err) => {
+    globalForSetup._chasisSetup = Promise.all([ensureSchema(db, c), bootstrapAdmin(c)])
+      .then(() => undefined)
+      .catch((err) => {
       globalForSetup._chasisSetup = undefined;
       throw err;
     });

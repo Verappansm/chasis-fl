@@ -28,6 +28,7 @@ export function NavLinks({ items }: { items: NavItem[] }) {
           <Link
             key={item.href}
             href={item.href}
+            data-tour={`nav-${item.href.slice(1).replaceAll("/", "-")}`}
             aria-current={active ? "page" : undefined}
             className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
               active ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5 hover:text-white"

@@ -33,20 +33,27 @@ export function LinkButton({
   href,
   children,
   variant = "primary",
+  tour,
 }: {
   href: string;
   children: ReactNode;
   variant?: keyof typeof buttonStyles;
+  /** data-tour marker for the guided tour. */
+  tour?: string;
 }) {
   return (
-    <Link href={href} className={buttonStyles[variant]}>
+    <Link href={href} className={buttonStyles[variant]} data-tour={tour}>
       {children}
     </Link>
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>;
+export function Card({ children, className = "", tour }: { children: ReactNode; className?: string; tour?: string }) {
+  return (
+    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`} data-tour={tour}>
+      {children}
+    </div>
+  );
 }
 
 const badgeTones = {

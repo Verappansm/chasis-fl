@@ -18,6 +18,7 @@ import {
   findRecord,
   insertRecord,
   listRecords,
+  PAGE_SIZE,
   searchFilter,
   updateRecord,
   writeAudit,
@@ -115,12 +116,31 @@ export async function getFinance(id: string) {
 export async function listFinance(opts: { q?: string; status: ReceivedFilter; page: number }) {
   const { finance, vehicles } = await collections();
   const filter = { ...searchFilter(opts.q, ["provider"]), ...receivedFilter(opts.status) } as Filter<FinanceDoc>;
-  const page = await listRecords(finance, filter, { initiatedDate: -1, _id: -1 }, opts.page);
-  const vs = await vehicles
-    .find({ chassisNumber: { $in: page.items.map((f) => f.chassisNumber) } })
+  const page = Number.isInteger(opts.page) && opts.page > 0 ? opts.page : 1;
+  // One round trip: page of cases joined to their vehicle, plus the total.
+  const [row] = await finance
+    .aggregate<{ items: (FinanceDoc & { vehicle: VehicleDoc[] })[]; total: { n: number }[] }>([
+      { $match: filter },
+      {
+        $facet: {
+          items: [
+            { $sort: { initiatedDate: -1, _id: -1 } },
+            { $skip: (page - 1) * PAGE_SIZE },
+            { $limit: PAGE_SIZE },
+            { $lookup: { from: vehicles.collectionName, localField: "chassisNumber", foreignField: "chassisNumber", as: "vehicle" } },
+          ],
+          total: [{ $count: "n" }],
+        },
+      },
+    ])
     .toArray();
-  const byChassis = new Map(vs.map((v) => [v.chassisNumber, v]));
-  return { ...page, items: page.items.map((doc) => ({ doc, vehicle: byChassis.get(doc.chassisNumber) })) };
+  const total = row?.total[0]?.n ?? 0;
+  return {
+    items: (row?.items ?? []).map(({ vehicle, ...doc }) => ({ doc: doc as FinanceDoc, vehicle: vehicle[0] as VehicleDoc | undefined })),
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
 }
 
 /* ----------------------------------------------------------------- insurance */

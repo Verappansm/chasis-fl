@@ -27,6 +27,8 @@ export interface UserDoc {
   tokenVersion: number;
   lastLoginAt?: Date;
   passwordChangedAt?: Date;
+  /** Set when the user finishes or skips the guided tour. */
+  tourCompletedAt?: Date;
   createdAt: Date;
   createdBy?: string;
   updatedAt: Date;

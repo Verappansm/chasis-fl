@@ -32,7 +32,7 @@ export default function IncentivesPage({ searchParams }: PageProps<"/incentives"
         description="Incentives paid out by the dealership (sales executives, brokers, DSAs) against each chassis."
         action={
           <IfCan permission="incentives:edit">
-            <LinkButton href="/incentives/new">Record payout</LinkButton>
+            <LinkButton href="/incentives/new" tour="new-record">Record payout</LinkButton>
           </IfCan>
         }
       />
@@ -53,7 +53,7 @@ async function IncentiveList({ searchParams }: { searchParams: PageProps<"/incen
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} deleted={one(sp.deleted) === "1"} />
-      <Card>
+      <Card tour="incentives-list">
         <ListToolbar basePath="/incentives" q={q} placeholder="Search chassis, payee or reference" />
         {result.items.length === 0 ? (
           <EmptyState title="No payouts found">{q ? "Try a different search." : "Record the first payout."}</EmptyState>

@@ -47,7 +47,7 @@ async function UserList({ searchParams }: { searchParams: PageProps<"/admin/user
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} />
-      <Card>
+      <Card tour="users-list">
         <DataTable
           head={
             <>
