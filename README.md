@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chasis ERP
 
-## Getting Started
+Finance & Insurance (F&I) desk ERP for a car dealership. Every record is keyed by
+**chassis number** and tracks:
 
-First, run the development server:
+- **Finance**: loan cases, finance-provider payout (incentive) and vehicle purchase/selling price
+- **Insurance**: policies sold and insurer commission (incentive)
+- **Renewal**: insurance renewal follow-ups, plus an automatic list of policies about to expire
+- **Incentive**: incentives paid out to sales executives, brokers, DSAs and others
+- **Overview**: received vs pending incentives with ageing, payouts, net incentive, margin and renewals due
+
+For the business analysis, system design and database design, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Stack
+
+Next.js 16 (App Router, Server Actions, Cache Components) · React 19 · TypeScript ·
+Tailwind CSS 4 · MongoDB (official driver) · zod · jose (JWT) · bcrypt.
+
+## Local setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then fill in MONGODB_URI and AUTH_SECRET
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Generate `AUTH_SECRET` with:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The first request creates the database indexes. If the `users` collection is
+empty, it also creates the admin account from `ADMIN_USERNAME` /
+`ADMIN_INITIAL_PASSWORD` (default **admin / chasis**).
 
-## Learn More
+> **Security:** `chasis` is a weak password and was requested for the initial
+> handover. Set a strong `ADMIN_INITIAL_PASSWORD` **before the first production
+> run**. The env var only applies when the admin is first created; changing it
+> later has no effect.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy to Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Push this repo to GitHub/GitLab and import it in Vercel. The framework is auto-detected and no build settings are needed.
+2. In **Project → Settings → Environment Variables**, set:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   | Name | Value |
+   |---|---|
+   | `MONGODB_URI` | your Atlas connection string |
+   | `MONGODB_DB` | `chasis_erp` |
+   | `AUTH_SECRET` | 48+ random characters (unique per environment) |
+   | `ADMIN_USERNAME` | `admin` |
+   | `ADMIN_INITIAL_PASSWORD` | strong password |
 
-## Deploy on Vercel
+3. In **MongoDB Atlas → Network Access**, allow Vercel to connect. Use `0.0.0.0/0`
+   with a strong DB-user password, or Vercel's static egress IPs on paid plans.
+   Give the DB user `readWrite` on the app database only.
+4. Deploy, then open `/login`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Users & access
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Admins manage people under **Users** in the sidebar (`/admin/users`):
+
+- **Roles:** *Admin* has full access plus user management. *User* gets only the permissions ticked on their account.
+- **Permissions:** View / Create & edit / Delete per module (Finance, Insurance, Renewal, Incentive), plus the Overview dashboard. Edit and Delete include View. Quick-fill presets: Read only, Data entry, All data access.
+- **Changes take effect on the user's next click**, with no need to sign out. Deactivating a user or resetting their password signs them out everywhere.
+- **Lock-out protection:** admins cannot demote or deactivate themselves, and the last active admin cannot be removed.
+- Users are **deactivated, not deleted**, so the audit trail stays intact.
+- Everyone can change their own password under **My account** (click your name in the sidebar).
+
+Every rule is enforced on the server for each page and each save, so hiding a button is never the only protection.
+
+## Operations
+
+- **Revoke all sessions for a user:** reset their password, deactivate them, or increment `tokenVersion` on their `users` document.
+- **Audit trail:** the `audit_logs` collection records every create, update, delete and login, with before/after snapshots.
+- **Locked out after failed logins:** wait 15 minutes, or delete the matching documents from `login_attempts`.
+
+## Scripts
+
+| | |
+|---|---|
+| `npm run dev` | dev server |
+| `npm run build` | production build |
+| `npm start` | serve the production build |
+| `npm run lint` | ESLint |
+| `npm run seed:demo` | load demo data (safe to re-run; see `docs/DEMO_SCRIPT.md`) |
+| `npm run seed:demo -- --reset` | remove demo data |
