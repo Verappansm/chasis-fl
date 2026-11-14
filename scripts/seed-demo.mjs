@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * Demo data for client walkthroughs.
+ * Demo data for client walkthroughs (VST Titanium Motors, Mercedes-Benz).
  *
- *   npm run seed:demo            # (re)load demo data
- *   npm run seed:demo -- --reset # remove demo data only
+ *   npm run seed:demo            # (re)load demo data and demo users
+ *   npm run seed:demo -- --reset # remove demo data and demo users only
  *
- * Every document written here carries `demo: true`. A reset deletes those,
- * plus anything on the demo's fictional chassis numbers (DEMO_CHASSIS), so
- * real records are never touched. Dates are relative to "today"
- * (IST) so the dashboard always looks current. Re-running is safe.
+ * Every document written here carries `demo: true`, and a reset deletes only
+ * those, so real records are never touched. Dates are relative to "today"
+ * (IST) so the dashboard always looks current. Re-running is safe. The
+ * random numbers are seeded, so every run produces the same cars.
+ *
+ * The calculations mirror src/lib/calc.ts; keep them in step.
  */
 import { MongoClient, ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
@@ -25,118 +27,117 @@ const RESET_ONLY = process.argv.includes("--reset");
 
 const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 const TODAY = new Date(`${todayIso}T00:00:00.000Z`);
-const daysAgo = (n) => new Date(TODAY.getTime() - n * 86_400_000);
-const daysFromNow = (n) => daysAgo(-n);
-const paise = (rupees) => Math.round(rupees * 100);
-const lakh = (l) => paise(l * 100_000);
-const stamp = (user, at) => ({ createdAt: at, createdBy: user, updatedAt: at, updatedBy: user, version: 1, demo: true });
+const DAY = 86_400_000;
+const daysAgo = (n) => new Date(TODAY.getTime() - n * DAY);
+const addDays = (d, n) => new Date(d.getTime() + n * DAY);
+const ageOf = (d) => Math.round((TODAY.getTime() - d.getTime()) / DAY);
+const lakh = (l) => Math.round(l * 100_000) * 100; // rupees in lakh → paise
+const percentOf = (amount, bp) => Math.round((amount * bp) / 10_000);
+const roundTo = (paise, rupees) => Math.round(paise / (rupees * 100)) * rupees * 100;
 
-/* -------------------------------------------------------------- demo data
- * One row per vehicle sold.
- *   fin: [provider, loanLakh, incentive%, initiatedDaysAgo, receivedAfterDays | null]
- *   ins: [provider, premium, incentive%, soldDaysAgo, receivedAfterDays | null, policyNo]
- * A policy runs one year from the sale, so soldDaysAgo ~320-380 means it is
- * up for renewal right now.
- */
-const SALES = [
-  // Story 1: big pending HDFC payout, overdue (red badge)
-  { chassis: "MA3EWDE1S00412345", model: "Maruti Swift VXI", customer: "Arjun Mehta", buy: 6.45, sell: 7.12, by: "priya",
-    fin: ["HDFC Bank", 5.5, 1.25, 74, null], ins: ["ICICI Lombard", 28400, 15, 74, 21, "IL-3001-88421"] },
-  { chassis: "MALC381CLNM204518", model: "Hyundai Creta SX", customer: "Kavya Iyer", buy: 14.2, sell: 15.6, by: "priya",
-    fin: ["HDFC Bank", 11.0, 1.1, 92, null], ins: ["HDFC ERGO", 46200, 12, 92, null, "HE-55-120934"] },
-  { chassis: "MAT62512BNP318842", model: "Tata Nexon XZ+", customer: "Rohan Desai", buy: 10.1, sell: 11.05, by: "admin",
-    fin: ["SBI", 8.0, 0.9, 41, 29], ins: ["TATA AIG", 33800, 14, 41, 18, "TA-0192-7731"] },
-  { chassis: "MA1TA2YD2N2093411", model: "Mahindra XUV700 AX5", customer: "Neha Kulkarni", buy: 17.8, sell: 19.2, by: "priya",
-    fin: ["Mahindra Finance", 14.0, 1.4, 63, null], ins: ["Bajaj Allianz", 52100, 13, 63, 30, "BA-OG-26-1102"] },
-  { chassis: "MZBEN813LNN120776", model: "Kia Seltos HTX", customer: "Vikram Singh", buy: 13.6, sell: 14.75, by: "admin",
-    fin: ["ICICI Bank", 10.5, 1.2, 25, null], ins: ["ICICI Lombard", 41800, 15, 25, null, "IL-3001-90112"] },
-  { chassis: "MAKGM657BN4501238", model: "Honda City V", customer: "Ananya Rao", buy: 11.9, sell: 12.85, by: "priya",
-    fin: ["Axis Bank", 9.0, 1.0, 118, 46], ins: ["HDFC ERGO", 36500, 12, 118, 40, "HE-55-118020"] },
-  { chassis: "MA3EWDE1S00418820", model: "Maruti Baleno Zeta", customer: "Siddharth Joshi", buy: 7.3, sell: 7.95, by: "priya",
-    fin: ["Kotak Mahindra Prime", 6.0, 1.3, 15, null], ins: ["New India Assurance", 24300, 10, 15, null, "NIA-31-660218"] },
-  { chassis: "MALC381CLNM208840", model: "Hyundai Venue S(O)", customer: "Pooja Nair", buy: 9.4, sell: 10.2, by: "admin",
-    fin: ["HDFC Bank", 7.5, 1.25, 156, 52], ins: ["ICICI Lombard", 30100, 15, 156, 35, "IL-3001-85007"] },
-  { chassis: "MAT62512BNP322019", model: "Tata Punch Accomplished", customer: "Imran Shaikh", buy: 7.05, sell: 7.6, by: "priya",
-    fin: ["SBI", 5.0, 0.9, 8, null], ins: ["TATA AIG", 22900, 14, 8, null, "TA-0192-8840"] },
-  // Cash sales: no finance case, margin still tracked
-  { chassis: "MA3EWDE1S00420117", model: "Maruti Dzire ZXI", customer: "Harish Patel", buy: 7.9, sell: 8.45, by: "priya",
-    fin: null, ins: ["Bajaj Allianz", 26700, 13, 33, null, "BA-OG-26-1290"] },
-  { chassis: "MAKGM657BN4507710", model: "Honda Amaze VX", customer: "Meera Pillai", buy: 8.2, sell: 8.7, by: "admin",
-    fin: null, ins: ["HDFC ERGO", 27900, 12, 51, 28, "HE-55-121877"] },
-  // Up for renewal now (sold ~1 year ago)
-  { chassis: "MA3EWDE1S00381120", model: "Maruti Ertiga VXI", customer: "Deepak Verma", buy: 9.6, sell: 10.3, by: "admin",
-    fin: ["ICICI Bank", 7.0, 1.2, 352, 41], ins: ["ICICI Lombard", 31200, 15, 352, 38, "IL-3001-61254"] },
-  { chassis: "MALC381CLNM189304", model: "Hyundai i20 Asta", customer: "Shreya Ghosh", buy: 8.9, sell: 9.6, by: "admin",
-    fin: ["Axis Bank", 6.5, 1.0, 340, 37], ins: ["HDFC ERGO", 29800, 12, 340, 33, "HE-55-097321"] },
-  { chassis: "MAT62512BNP290553", model: "Tata Altroz XZ", customer: "Karan Malhotra", buy: 8.1, sell: 8.75, by: "admin",
-    fin: null, ins: ["TATA AIG", 25600, 14, 329, 26, "TA-0192-5108"] },
-  { chassis: "MZBEN813LNN099812", model: "Kia Sonet HTK+", customer: "Fatima Khan", buy: 10.4, sell: 11.2, by: "admin",
-    fin: ["HDFC Bank", 8.0, 1.25, 371, 48], ins: ["Bajaj Allianz", 34400, 13, 371, 31, "BA-OG-25-0871"] },
-  { chassis: "MA1TA2YD2N2071190", model: "Mahindra Scorpio-N Z4", customer: "Gurpreet Sandhu", buy: 15.2, sell: 16.4, by: "admin",
-    fin: ["Mahindra Finance", 12.0, 1.4, 334, 55], ins: ["New India Assurance", 44700, 10, 334, 47, "NIA-31-588102"] },
-  { chassis: "MA3EWDE1S00379945", model: "Maruti Brezza ZXI", customer: "Lakshmi Menon", buy: 10.8, sell: 11.6, by: "admin",
-    fin: ["SBI", 8.5, 0.9, 345, 44], ins: ["ICICI Lombard", 35900, 15, 345, 36, "IL-3001-60391"] },
-  { chassis: "MAKGM657BN4480061", model: "Honda Elevate ZX", customer: "Nikhil Bansal", buy: 14.9, sell: 16.0, by: "admin",
-    fin: ["Kotak Mahindra Prime", 11.0, 1.3, 358, 50], ins: ["HDFC ERGO", 47300, 12, 358, 42, "HE-55-096612"] },
-  // Older sales, everything settled
-  { chassis: "MALC381CLNM176650", model: "Hyundai Verna SX", customer: "Ritu Agarwal", buy: 12.7, sell: 13.8, by: "admin",
-    fin: ["ICICI Bank", 10.0, 1.2, 210, 39], ins: ["ICICI Lombard", 38800, 15, 210, 30, "IL-3001-72218"] },
-  { chassis: "MAT62512BNP301877", model: "Tata Harrier Fearless", customer: "Aditya Kapoor", buy: 21.5, sell: 23.1, by: "admin",
-    fin: ["HDFC Bank", 17.0, 1.25, 188, 44], ins: ["TATA AIG", 61200, 14, 188, 27, "TA-0192-6620"] },
+// Deterministic PRNG (mulberry32) so every run produces the same demo.
+let seed = 20261114;
+function rand() {
+  seed |= 0;
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+const between = (a, b) => a + Math.floor(rand() * (b - a + 1));
+const chance = (p) => rand() < p;
+const VIN_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+const chassis = () => `MBR${Array.from({ length: 14 }, () => pick(VIN_CHARS)).join("")}`;
+const fy = (d) => {
+  const y = d.getUTCMonth() >= 3 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+  return `${String(y).slice(2)}-${String(y + 1).slice(2)}`;
+};
+
+/* -------------------------------------------------------------- reference data */
+
+const MODELS = [
+  { carClass: "A-Class Limousine", model: "A 200", grade: "series", basic: 42 },
+  { carClass: "C-Class", model: "C 200", grade: "series", basic: 54 },
+  { carClass: "C-Class", model: "C 220d", grade: "series", basic: 58 },
+  { carClass: "E-Class LWB", model: "E 200", grade: "series", basic: 70 },
+  { carClass: "E-Class LWB", model: "E 220d", grade: "series", basic: 74 },
+  { carClass: "GLA", model: "GLA 200", grade: "series", basic: 46 },
+  { carClass: "GLC", model: "GLC 300 4MATIC", grade: "series", basic: 72 },
+  { carClass: "GLE", model: "GLE 300d 4MATIC", grade: "series", basic: 92 },
+  { carClass: "GLS", model: "GLS 450 4MATIC", grade: "top_end", basic: 118 },
+  { carClass: "S-Class", model: "S 350d", grade: "top_end", basic: 165 },
+  { carClass: "Maybach", model: "Maybach S 580", grade: "top_end", basic: 255 },
+  { carClass: "EQA", model: "EQA 250+", grade: "ev", basic: 63 },
+  { carClass: "EQB", model: "EQB 350 4MATIC", grade: "ev", basic: 72 },
+  { carClass: "EQE SUV", model: "EQE 500 4MATIC", grade: "ev", basic: 132 },
+  { carClass: "EQS SUV", model: "EQS 580 4MATIC", grade: "ev", basic: 136 },
 ];
-
-/** Follow-ups for some of the policies that are up for renewal. */
-const RENEWALS = [
-  { chassis: "MA3EWDE1S00381120", status: "contacted", followUp: 2, notes: "Customer asked for a quote from two insurers. Call back with ICICI Lombard and HDFC ERGO comparison." },
-  { chassis: "MALC381CLNM189304", status: "due", followUp: -3, notes: "Not reachable on two attempts. Try WhatsApp." },
-  { chassis: "MZBEN813LNN099812", status: "renewed", followUp: null, notes: "Renewed with Bajaj Allianz, 5% NCB applied." },
-  { chassis: "MA1TA2YD2N2071190", status: "lost", followUp: null, notes: "Customer renewed online directly with insurer for a lower premium." },
+const LOCATIONS = ["Main showroom", "City showroom", "Stockyard"];
+const CUSTOMERS = [
+  "Arjun Mehta", "Kavya Iyer", "Rohan Desai", "Neha Kulkarni", "Vikram Singh", "Ananya Rao", "Siddharth Joshi",
+  "Pooja Nair", "Imran Shaikh", "Harish Patel", "Meera Pillai", "Deepak Verma", "Shreya Ghosh", "Karan Malhotra",
+  "Fatima Khan", "Gurpreet Sandhu", "Lakshmi Menon", "Nikhil Bansal", "Ritu Agarwal", "Aditya Kapoor", "Sanjay Reddy",
+  "Divya Krishnan", "Rahul Bhatia", "Priya Raman", "Varun Chopra", "Aisha Siddiqui", "Manoj Pillai", "Sneha Patil",
+  "Kiran Rao", "Tarun Gupta", "Nandini Iyer", "Abhishek Jain", "Rekha Subramaniam", "Farhan Ali", "Meghna Das",
 ];
+const BANKS = ["Mercedes-Benz Financial Services", "HDFC Bank", "ICICI Bank", "Axis Bank", "Kotak Mahindra Prime", "SBI"];
+const INSURERS = ["ICICI Lombard", "HDFC ERGO", "Bajaj Allianz", "TATA AIG", "Go Digit"];
+const MAKES = ["Mercedes-Benz", "BMW", "Audi", "Volvo", "Jaguar", "Lexus"];
 
-/** Payouts to people who brought or closed the deal. */
-const PAYOUTS = [
-  ["MA3EWDE1S00412345", 2500, "Rahul Sharma", "sales_executive", 40, "UTR SBIN226104455"],
-  ["MAT62512BNP318842", 3000, "Rahul Sharma", "sales_executive", 10, "UTR SBIN226198812"],
-  ["MA1TA2YD2N2093411", 5000, "Sneha Patil", "sales_executive", 28, "UTR HDFC226140021"],
-  ["MA1TA2YD2N2093411", 4000, "Om Motors (sub-dealer)", "broker", 26, "CHQ 004512"],
-  ["MAKGM657BN4501238", 2500, "Sneha Patil", "sales_executive", 70, "UTR HDFC226077310"],
-  ["MALC381CLNM208840", 3500, "Ajay Finserv DSA", "dsa", 95, "UTR ICIC226011893"],
-  ["MA3EWDE1S00381120", 2000, "Rahul Sharma", "sales_executive", 300, "UTR SBIN225880120"],
-  ["MZBEN813LNN099812", 3000, "Imran Qureshi", "referral", 320, "Cash voucher 118"],
-  ["MALC381CLNM176650", 4500, "Sneha Patil", "sales_executive", 160, "UTR HDFC225990441"],
-  ["MAT62512BNP301877", 7500, "Om Motors (sub-dealer)", "broker", 140, "CHQ 004377"],
-  ["MAT62512BNP301877", 3000, "Vikas Rao", "sales_executive", 140, "UTR AXIS225991020"],
-];
-
-/**
- * Chassis entered live while following docs/DEMO_SCRIPT.md. Records on these
- * (and on the seeded chassis above) are cleared on every run, so rehearsals
- * always start from the same numbers.
- */
-const LIVE_DEMO_CHASSIS = ["MA3EWDE1S00431999"];
-const DEMO_CHASSIS = [...SALES.map((s) => s.chassis), ...LIVE_DEMO_CHASSIS];
+/** Starter option lists (only written where an admin has not created the list). */
+const OPTION_LISTS = {
+  location: { mode: "dropdown", options: LOCATIONS },
+  carClass: { mode: "text", options: [...new Set(MODELS.map((m) => m.carClass))] },
+  model: { mode: "text", options: MODELS.map((m) => m.model) },
+  financeProvider: { mode: "dropdown", options: BANKS },
+  insuranceProvider: { mode: "dropdown", options: INSURERS },
+  preownedMake: { mode: "text", options: MAKES },
+};
 
 const DEMO_USERS = [
-  { username: "priya", password: "Priya@2026", role: "user", label: "Data entry",
-    permissions: ["overview:view", "finance:view", "finance:edit", "insurance:view", "insurance:edit", "renewals:view", "renewals:edit", "incentives:view", "incentives:edit"] },
-  { username: "accounts", password: "Accounts@2026", role: "user", label: "Read only",
-    permissions: ["overview:view", "finance:view", "insurance:view", "renewals:view", "incentives:view"] },
+  {
+    username: "sales", password: "Sales@2026", label: "Sales desk: creates records and raises invoices, no receipts",
+    permissions: ["overview:view", "purchases:invoice", "preowned:edit", "finance:invoice", "insurance:invoice", "renewals:invoice"],
+  },
+  {
+    username: "accounts", password: "Accounts@2026", label: "Accounts: views everything, records receipts",
+    permissions: ["overview:view", "purchases:receipt", "preowned:view", "finance:receipt", "insurance:receipt", "renewals:receipt"],
+  },
+  {
+    username: "manager", password: "Manager@2026", label: "Manager: all data access incl. delete, no user admin",
+    permissions: [
+      "overview:view", "purchases:invoice", "purchases:receipt", "purchases:delete", "preowned:edit", "preowned:delete",
+      "finance:invoice", "finance:receipt", "finance:delete", "insurance:invoice", "insurance:receipt", "insurance:delete",
+      "renewals:invoice", "renewals:receipt", "renewals:delete",
+    ],
+  },
+  {
+    username: "viewer", password: "Viewer@2026", label: "Read only",
+    permissions: ["overview:view", "purchases:view", "preowned:view", "finance:view", "insurance:view", "renewals:view"],
+  },
 ];
+
+/** Adds the implied `view` for each action, like normalizePermissions(). */
+function withView(perms) {
+  const out = new Set(perms);
+  for (const p of perms) out.add(`${p.split(":")[0]}:view`);
+  return [...out];
+}
 
 /* ---------------------------------------------------------------------- run */
 
 const client = await MongoClient.connect(uri, { serverSelectionTimeoutMS: 10_000 });
 const db = client.db(dbName);
 const col = (n) => db.collection(n);
-const BUSINESS = ["vehicles", "finance", "insurance", "renewals", "incentives", "audit_logs"];
+const BUSINESS = ["purchases", "preowned", "finance_payouts", "insurance_payouts", "renewal_payouts", "audit_logs"];
 
 try {
-  // 1. Remove previous demo data: anything tagged demo: true, plus records on
-  //    the demo's own (fictional) chassis numbers that were entered live.
+  // 1. Remove previous demo data and demo users (and starter lists nobody has edited).
   let removed = 0;
-  const demoFilter = { $or: [{ demo: true }, { chassisNumber: { $in: DEMO_CHASSIS } }] };
-  for (const n of BUSINESS) removed += (await col(n).deleteMany(demoFilter)).deletedCount;
+  for (const n of BUSINESS) removed += (await col(n).deleteMany({ demo: true })).deletedCount;
   removed += (await col("users").deleteMany({ demo: true })).deletedCount;
+  removed += (await col("option_lists").deleteMany({ demo: true, version: 1 })).deletedCount;
   console.log(`Removed ${removed} previous demo documents.`);
   if (RESET_ONLY) {
     console.log("Reset complete.");
@@ -161,112 +162,309 @@ try {
       continue;
     }
     await col("users").insertOne({
-      username: u.username, passwordHash: await bcrypt.hash(u.password, 12), role: u.role, permissions: u.permissions,
+      username: u.username, passwordHash: await bcrypt.hash(u.password, 12), role: "user", permissions: withView(u.permissions),
       active: true, tokenVersion: 0, passwordChangedAt: new Date(),
       createdAt: daysAgo(120), createdBy: "admin", updatedAt: daysAgo(120), updatedBy: "admin", version: 1, demo: true,
     });
   }
 
-  // 4. Vehicles, finance and insurance.
-  const vehicles = [], finance = [], insurance = [], audit = [];
-  for (const s of SALES) {
-    const soldAt = daysAgo(s.fin ? s.fin[3] : s.ins[3]);
-    vehicles.push({
-      _id: new ObjectId(), chassisNumber: s.chassis, model: s.model, customerName: s.customer,
-      purchasePrice: lakh(s.buy), sellingPrice: lakh(s.sell), ...stamp(s.by, soldAt),
+  // 4. Starter option lists.
+  for (const [key, list] of Object.entries(OPTION_LISTS)) {
+    await col("option_lists").updateOne(
+      { _id: key },
+      { $setOnInsert: { ...list, updatedAt: new Date(), updatedBy: "admin", version: 1, demo: true } },
+      { upsert: true },
+    );
+  }
+
+  // 5. Rates: whatever the admin has set under Constants, else the defaults.
+  const s = (await col("settings").findOne({ _id: "rates" })) ?? {};
+  const R = {
+    fc: s.fcRateBp ?? 350, purchaseGst: s.purchaseGstRateBp ?? 1800, evGst: s.evPurchaseGstRateBp ?? 500,
+    saleGst: s.saleGstRateBp ?? 1800, serviceGst: s.serviceGstRateBp ?? 1800,
+    tds: { fc: s.fcTdsRateBp ?? s.tdsRateBp ?? 200, finance: s.financeTdsRateBp ?? s.tdsRateBp ?? 200, insurance: s.insuranceTdsRateBp ?? s.tdsRateBp ?? 200 },
+    lockIn: s.demoLockInDays ?? 90,
+  };
+  const gstFor = (grade) => (grade === "ev" ? R.evGst : R.purchaseGst);
+
+  const stamp = (user, at) => ({ createdAt: at, createdBy: user, updatedAt: at, updatedBy: user, version: 1, demo: true });
+  const audit = [];
+  const log = (at, user, action, entity, doc) =>
+    audit.push({ at, user, action, entity, id: doc._id, chassis: doc.chassisNumber, ref: doc.commissionNo ?? doc.stockNo ?? doc.dealRef });
+
+  // Our invoice numbers are one series across all tabs; numbered in date order at the end.
+  const pendingInvoices = [];
+  const invoiceNo = (date) => {
+    const ref = { date, no: "" };
+    pendingInvoices.push(ref);
+    return ref;
+  };
+  let receiptSeq = 400000;
+
+  /**
+   * Walks a receivable through invoice → receipt(s) depending on its age, so
+   * the overview shows a realistic spread: recent ones unbilled, older ones
+   * billed, most of the oldest collected, some short-paid (a few of those
+   * settled later with a second receipt).
+   */
+  function claim(claimAmount, startedOn, tdsRateBp) {
+    const claimGst = percentOf(claimAmount, R.serviceGst);
+    const claimTotal = claimAmount + claimGst;
+    const c = { serviceGstRateBp: R.serviceGst, tdsRateBp, claimAmount, claimGst, claimTotal, stage: "not_billed" };
+    const age = ageOf(startedOn);
+    const billChance = age < 3 ? 0 : age < 10 ? 0.6 : age < 30 ? 0.85 : 0.94;
+    if (!chance(billChance)) return c;
+    const invoiceDate = addDays(startedOn, between(1, Math.min(8, Math.max(1, age - 1))));
+    if (invoiceDate > TODAY) return c;
+    Object.assign(c, { invoiceNo: invoiceNo(invoiceDate), invoiceDate, stage: "billed" });
+    const invAge = ageOf(invoiceDate);
+    const payChance = invAge < 6 ? 0 : invAge < 25 ? 0.5 : invAge < 75 ? 0.8 : 0.9;
+    if (!chance(payChance)) return c;
+    const receiptDate = addDays(invoiceDate, between(5, Math.min(45, Math.max(5, invAge))));
+    if (receiptDate > TODAY) return c;
+    const tdsAmount = percentOf(claimAmount, tdsRateBp);
+    const payable = claimTotal - tdsAmount;
+    const short = chance(0.16) ? roundTo(Math.round(payable * (0.03 + rand() * 0.07)), 100) : 0;
+    const receipts = [
+      { id: new ObjectId().toHexString(), receiptNo: `RC${receiptSeq++}`, receiptDate, tdsAmount, receivedAmount: payable - short, at: receiptDate, by: "accounts" },
+    ];
+    // Some short payments are settled later.
+    const settleOn = addDays(receiptDate, between(20, 50));
+    if (short > 0 && settleOn <= TODAY && chance(0.4)) {
+      receipts.push({ id: new ObjectId().toHexString(), receiptNo: `RC${receiptSeq++}`, receiptDate: settleOn, tdsAmount: 0, receivedAmount: short, at: settleOn, by: "accounts" });
+    }
+    const tds = receipts.reduce((t, r) => t + r.tdsAmount, 0);
+    const received = receipts.reduce((t, r) => t + r.receivedAmount, 0);
+    const latest = receipts.at(-1);
+    const balance = claimTotal - tds - received;
+    return Object.assign(c, {
+      receipts, tdsAmount: tds, receivedAmount: received, receiptNo: latest.receiptNo, receiptDate: latest.receiptDate,
+      balance, stage: balance > 0 ? "short_paid" : "collected",
     });
-    if (s.fin) {
-      const [provider, loanL, pct, init, recvAfter] = s.fin;
-      const loan = lakh(loanL);
-      const received = recvAfter !== null && init - recvAfter >= 0;
+  }
+
+  function priced(m, purchaseDate, { salesBp, demoBp = 0, lossChance = 0.3 }) {
+    const basicPrice = lakh(m.basic + rand() * 4);
+    const salesMeasure = roundTo(percentOf(basicPrice, salesBp), 1000);
+    const demoDiscount = demoBp ? roundTo(percentOf(basicPrice, demoBp), 1000) : 0;
+    const lossAllowance = chance(lossChance) ? roundTo(percentOf(basicPrice, between(10, 120)), 500) : 0;
+    const taxableAmount = basicPrice - salesMeasure - demoDiscount - lossAllowance;
+    const purchaseGstRateBp = gstFor(m.grade);
+    const gstAmount = percentOf(taxableAmount, purchaseGstRateBp);
+    return {
+      grade: m.grade, carClass: m.carClass, model: m.model, basicPrice, salesMeasure, demoDiscount, lossAllowance,
+      taxableAmount, purchaseGstRateBp, gstAmount, finalPrice: taxableAmount + gstAmount, purchaseDate,
+    };
+  }
+
+  // 6. Purchases. New cars are spread over the last ~13 months (more recent = more of them).
+  const purchases = [];
+  let commission = 1104520300;
+  const nextCommission = () => String((commission += between(11, 97)));
+  const NEW_PER_BUCKET = [[0, 13, 14], [14, 30, 10], [31, 60, 12], [61, 90, 9], [91, 180, 8], [181, 300, 5], [330, 375, 16]];
+  for (const [from, to, n] of NEW_PER_BUCKET) {
+    for (let i = 0; i < n; i++) {
+      const m = pick(MODELS);
+      const purchaseDate = daysAgo(between(from, to));
+      const p = priced(m, purchaseDate, { salesBp: between(50, 300) });
       const doc = {
-        _id: new ObjectId(), chassisNumber: s.chassis, provider, loanAmount: loan,
-        incentiveAmount: Math.round((loan * pct) / 100), incentiveReceived: received,
-        initiatedDate: daysAgo(init), ...(received ? { receivedDate: daysAgo(init - recvAfter) } : {}),
-        ...stamp(s.by, daysAgo(init)),
+        _id: new ObjectId(), commissionNo: nextCommission(), chassisNumber: chassis(), type: "new",
+        location: pick(LOCATIONS), customerName: pick(CUSTOMERS), benzInvoiceNo: `MBIL${between(10000000, 99999999)}`,
+        ...p, fcRateBp: R.fc, ...claim(percentOf(p.basicPrice, R.fc), purchaseDate, R.tds.fc),
+        ...stamp(pick(["sales", "sales", "admin"]), purchaseDate),
       };
-      finance.push(doc);
-      audit.push({ at: daysAgo(init), user: s.by, action: "create", entity: "finance", id: doc._id, chassis: s.chassis });
-    }
-    if (s.ins) {
-      const [provider, premium, pct, sold, recvAfter, policyNumber] = s.ins;
-      const received = recvAfter !== null && sold - recvAfter >= 0;
-      const doc = {
-        _id: new ObjectId(), chassisNumber: s.chassis, provider, policyNumber, policyType: "new",
-        premiumAmount: paise(premium), incentiveAmount: paise(Math.round((premium * pct) / 100)),
-        incentiveReceived: received, initiatedDate: daysAgo(sold),
-        ...(received ? { receivedDate: daysAgo(sold - recvAfter) } : {}),
-        policyStartDate: daysAgo(sold), policyEndDate: daysAgo(sold - 364),
-        ...stamp(s.by, daysAgo(sold)),
-      };
-      insurance.push(doc);
-      audit.push({ at: daysAgo(sold), user: s.by, action: "create", entity: "insurance", id: doc._id, chassis: s.chassis });
+      purchases.push(doc);
+      log(purchaseDate, doc.createdBy, "create", "purchase", doc);
     }
   }
 
-  // 5. Renewal cases (+ the renewed policy for the "renewed" case).
-  const renewals = [];
-  for (const r of RENEWALS) {
-    const policy = insurance.find((p) => p.chassisNumber === r.chassis);
-    const doc = {
-      _id: new ObjectId(), chassisNumber: r.chassis, dueDate: policy.policyEndDate, status: r.status,
-      ...(r.followUp !== null ? { followUpDate: daysFromNow(r.followUp) } : {}), notes: r.notes,
-      ...stamp("priya", daysAgo(12)),
-    };
-    renewals.push(doc);
-    audit.push({ at: daysAgo(Math.max(1, 12 - renewals.length * 2)), user: "priya", action: "update", entity: "renewal", id: doc._id, chassis: r.chassis });
-    if (r.status === "renewed") {
-      const start = policy.policyEndDate;
-      const renewed = {
-        _id: new ObjectId(), chassisNumber: r.chassis, provider: policy.provider, policyNumber: `${policy.policyNumber}-R1`,
-        policyType: "renewal", premiumAmount: paise(32_100), incentiveAmount: paise(4_170), incentiveReceived: false,
-        initiatedDate: daysAgo(6), policyStartDate: start, policyEndDate: new Date(start.getTime() + 364 * 86_400_000),
-        ...stamp("priya", daysAgo(6)),
+  /**
+   * Demo cars: some still in lock-in, some deflected and waiting (a couple for
+   * a long time), and many sold across the year, at a loss or a small profit.
+   * Cars without a demo discount usually carry a loss claim with Mercedes-Benz.
+   */
+  const DEMOS = [
+    { ago: 12 }, { ago: 38 }, { ago: 66 }, { ago: 84 },
+    { ago: 98 }, { ago: 130 }, { ago: 175 }, { ago: 240, noDiscount: true },
+    { ago: 118, soldAfter: 95 }, { ago: 140, soldAfter: 100, noDiscount: true }, { ago: 165, soldAfter: 112 },
+    { ago: 190, soldAfter: 98, noDiscount: true }, { ago: 220, soldAfter: 130 }, { ago: 250, soldAfter: 120, noDiscount: true },
+    { ago: 290, soldAfter: 150 }, { ago: 320, soldAfter: 105 }, { ago: 350, soldAfter: 140, noDiscount: true },
+    { ago: 380, soldAfter: 160 }, { ago: 420, soldAfter: 110, noDiscount: true, noClaim: true },
+  ];
+  for (const o of DEMOS) {
+    const m = pick(MODELS);
+    const purchaseDate = daysAgo(o.ago);
+    const p = priced(m, purchaseDate, { salesBp: between(50, 200), demoBp: o.noDiscount ? 0 : between(400, 800), lossChance: 0.5 });
+    const deflectDate = addDays(purchaseDate, R.lockIn);
+    let sale = {};
+    if (o.soldAfter) {
+      const saleDate = addDays(purchaseDate, Math.max(o.soldAfter, R.lockIn));
+      const salePrice = roundTo(Math.round(p.taxableAmount * (0.86 + rand() * 0.16)), 10000);
+      const saleGst = percentOf(salePrice, R.saleGst);
+      const saleTotal = salePrice + saleGst;
+      const priceDifference = saleTotal - p.finalPrice;
+      const lossClaim = o.noDiscount && !o.noClaim && priceDifference < 0 ? roundTo(Math.round(-priceDifference * (0.4 + rand() * 0.5)), 1000) : 0;
+      const saleSalesMeasure = chance(0.6) ? roundTo(percentOf(p.basicPrice, between(50, 200)), 1000) : 0;
+      sale = {
+        saleDate, soldTo: pick(CUSTOMERS), salePrice, saleGstRateBp: R.saleGst, saleGst, saleTotal,
+        priceDifference, lossClaim, saleSalesMeasure, netProfit: priceDifference + lossClaim + saleSalesMeasure,
       };
-      insurance.push(renewed);
-      audit.push({ at: daysAgo(6), user: "priya", action: "create", entity: "insurance", id: renewed._id, chassis: r.chassis });
     }
+    const doc = {
+      _id: new ObjectId(), commissionNo: nextCommission(), chassisNumber: chassis(), type: "demo",
+      location: pick(LOCATIONS), benzInvoiceNo: `MBIL${between(10000000, 99999999)}`, ...p, stage: "na",
+      lockInDays: R.lockIn, deflectDate, ...sale, ...stamp("sales", purchaseDate),
+    };
+    purchases.push(doc);
+    log(purchaseDate, "sales", "create", "purchase", doc);
+    if (doc.saleDate) log(doc.saleDate, "sales", "update", "purchase", doc);
   }
 
-  // 6. Incentive payouts.
-  const incentives = PAYOUTS.map(([chassis, amount, paidTo, payeeType, ago, reference]) => {
+  // Bidding and courtesy cars.
+  const OTHERS = [
+    { type: "bidding", ago: 35 }, { type: "bidding", ago: 70, soldAfter: 25 },
+    { type: "courtesy", ago: 160 }, { type: "courtesy", ago: 240, soldAfter: 200 },
+  ];
+  for (const o of OTHERS) {
+    const m = pick(MODELS);
+    const purchaseDate = daysAgo(o.ago);
+    const p = priced(m, purchaseDate, { salesBp: between(50, 200), lossChance: 0.5 });
+    let sale = {};
+    if (o.soldAfter) {
+      const salePrice = roundTo(Math.round(p.taxableAmount * 0.97), 10000);
+      const saleGst = percentOf(salePrice, R.saleGst);
+      sale = { saleDate: addDays(purchaseDate, o.soldAfter), soldTo: pick(CUSTOMERS), salePrice, saleGstRateBp: R.saleGst, saleGst, saleTotal: salePrice + saleGst };
+    }
     const doc = {
-      _id: new ObjectId(), chassisNumber: chassis, amount: paise(amount), paidTo, payeeType,
-      paidDate: daysAgo(ago), reference, ...stamp("admin", daysAgo(ago)),
+      _id: new ObjectId(), commissionNo: nextCommission(), chassisNumber: chassis(), type: o.type,
+      location: pick(LOCATIONS), benzInvoiceNo: `MBIL${between(10000000, 99999999)}`, ...p, stage: "na", ...sale,
+      ...stamp("sales", purchaseDate),
     };
-    audit.push({ at: daysAgo(ago), user: "admin", action: "create", entity: "incentive", id: doc._id, chassis });
+    purchases.push(doc);
+    log(purchaseDate, "sales", "create", "purchase", doc);
+  }
+
+  // 7. Pre-owned: bought from customers; two sold.
+  const PREOWNED = [
+    { make: "Mercedes-Benz", model: "C 220d", year: 2021, buy: 32, ago: 25, use: "exchange" },
+    { make: "Mercedes-Benz", model: "GLA 200", year: 2022, buy: 30.5, ago: 48, use: "resale" },
+    { make: "BMW", model: "320d Luxury Line", year: 2020, buy: 26, ago: 70, use: "exchange" },
+    { make: "Mercedes-Benz", model: "E 220d", year: 2020, buy: 38, ago: 95, use: "resale", soldAfter: 40, sell: 42.5 },
+    { make: "Audi", model: "Q5 45 TFSI", year: 2021, buy: 34, ago: 140, use: "exchange", soldAfter: 30, sell: 37 },
+  ];
+  const preowned = PREOWNED.map((p, i) => {
+    const purchaseDate = daysAgo(p.ago);
+    const doc = {
+      _id: new ObjectId(), stockNo: `PO-D${String(i + 1).padStart(3, "0")}`, chassisNumber: chassis(),
+      registrationNo: `TN${String(between(1, 99)).padStart(2, "0")}${pick(["AB", "BC", "CK", "DZ"])}${between(1000, 9999)}`,
+      make: p.make, model: p.model, yearOfMake: p.year, sellerName: pick(CUSTOMERS), purchaseDate,
+      purchasePrice: lakh(p.buy), intendedUse: p.use,
+      ...(p.soldAfter ? { saleDate: addDays(purchaseDate, p.soldAfter), buyerName: pick(CUSTOMERS), salePrice: lakh(p.sell) } : {}),
+      ...stamp("sales", purchaseDate),
+    };
+    log(purchaseDate, "sales", "create", "preowned", doc);
     return doc;
   });
 
-  await col("vehicles").insertMany(vehicles);
-  await col("finance").insertMany(finance);
-  await col("insurance").insertMany(insurance);
-  await col("renewals").insertMany(renewals);
-  await col("incentives").insertMany(incentives);
+  // 8. Payouts on sold cars: finance on about half, insurance on most.
+  const deals = [
+    ...purchases
+      .filter((p) => p.type === "new" || p.saleDate)
+      .map((p) => ({ ref: p.commissionNo, kind: "purchase", chassis: p.chassisNumber, soldOn: p.type === "new" ? p.purchaseDate : p.saleDate, value: p.saleTotal ?? p.finalPrice, basic: p.basicPrice })),
+    ...preowned
+      .filter((p) => p.saleDate)
+      .map((p) => ({ ref: p.stockNo, kind: "preowned", chassis: p.chassisNumber, soldOn: p.saleDate, value: p.salePrice, basic: p.salePrice })),
+  ];
+  const finance = [], insurance = [], renewals = [];
+  for (const d of deals) {
+    const link = { dealRef: d.ref, dealKind: d.kind, chassisNumber: d.chassis };
+    if (chance(0.55)) {
+      const disbursalDate = addDays(d.soldOn, between(1, 6));
+      if (disbursalDate <= TODAY) {
+        const loanAmount = roundTo(Math.round(d.value * (0.55 + rand() * 0.25)), 10000);
+        const doc = {
+          _id: new ObjectId(), ...link, provider: pick(BANKS), loanAmount, contractNo: `LN${between(10000000, 99999999)}`,
+          disbursalDate, ...claim(roundTo(percentOf(loanAmount, between(60, 140)), 100), disbursalDate, R.tds.finance), ...stamp("sales", disbursalDate),
+        };
+        finance.push(doc);
+        log(disbursalDate, "sales", "create", "finance", doc);
+      }
+    }
+    if (chance(0.82)) {
+      const policyStartDate = d.soldOn;
+      const odPremium = roundTo(percentOf(d.basic, between(150, 230)), 100);
+      const doc = {
+        _id: new ObjectId(), ...link, provider: pick(INSURERS), policyNumber: `P${between(100000000, 999999999)}`, odPremium,
+        policyStartDate, policyEndDate: addDays(policyStartDate, 364),
+        ...claim(roundTo(percentOf(odPremium, between(1000, 1800)), 10), policyStartDate, R.tds.insurance), ...stamp("sales", policyStartDate),
+      };
+      insurance.push(doc);
+      log(policyStartDate, "sales", "create", "insurance", doc);
 
-  // 7. Audit trail so "Recent activity" reads naturally (times spread through the working day).
+      // About a year on: renew about half of the policies that have come up, with the same insurer.
+      const end = doc.policyEndDate;
+      if (ageOf(end) > -25 && chance(0.55)) {
+        const start = addDays(end, 1);
+        const createdOn = addDays(end, -between(5, 15)) < TODAY ? addDays(end, -between(5, 15)) : TODAY;
+        const ren = {
+          _id: new ObjectId(), ...link, provider: doc.provider,
+          policyNumber: `P${between(100000000, 999999999)}`, odPremium: roundTo(Math.round(odPremium * 0.88), 100),
+          policyStartDate: start, policyEndDate: addDays(start, 364),
+          ...claim(roundTo(percentOf(odPremium, between(900, 1500)), 10), createdOn, R.tds.insurance), ...stamp("sales", createdOn),
+        };
+        renewals.push(ren);
+        log(createdOn, "sales", "create", "renewal", ren);
+      }
+    }
+  }
+
+  // Number our invoices in date order, one series per financial year ("D" marks demo data).
+  pendingInvoices.sort((a, b) => a.date - b.date);
+  const perFy = {};
+  for (const inv of pendingInvoices) {
+    const f = fy(inv.date);
+    perFy[f] = (perFy[f] ?? 0) + 1;
+    inv.no = `VST/${f}/D${String(perFy[f]).padStart(4, "0")}`;
+  }
+  for (const doc of [...purchases, ...finance, ...insurance, ...renewals]) if (doc.invoiceNo) doc.invoiceNo = doc.invoiceNo.no;
+
+  await col("purchases").insertMany(purchases);
+  await col("preowned").insertMany(preowned);
+  if (finance.length) await col("finance_payouts").insertMany(finance);
+  if (insurance.length) await col("insurance_payouts").insertMany(insurance);
+  if (renewals.length) await col("renewal_payouts").insertMany(renewals);
+
+  // 9. Audit trail so "Recent activity" and the activity log read naturally (times spread through the working day).
   const users = await col("users").find({}, { projection: { username: 1 } }).toArray();
   const idOf = (name) => users.find((u) => u.username === name)?._id.toHexString() ?? "demo";
   await col("audit_logs").insertMany(
     audit.map((a, i) => ({
-      _id: new ObjectId(), at: new Date(a.at.getTime() + (4 + (i % 8)) * 3_600_000 + (i * 7 % 60) * 60_000),
+      _id: new ObjectId(), at: new Date(a.at.getTime() + (4 + (i % 8)) * 3_600_000 + ((i * 7) % 60) * 60_000),
       userId: idOf(a.user), username: a.user, action: a.action, entity: a.entity,
-      entityId: a.id.toHexString(), chassisNumber: a.chassis, demo: true,
+      entityId: a.id.toHexString(), ref: a.ref, chassisNumber: a.chassis, ip: "10.0.0.12", demo: true,
     })),
   );
 
   // Summary
-  const sum = (arr, f) => arr.reduce((t, d) => t + f(d), 0) / 100;
-  const inr = (n) => n.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+  const thisMonth = new Date(Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth(), 1));
+  const newThisMonth = purchases.filter((p) => p.type === "new" && p.purchaseDate >= thisMonth);
+  const count = (arr, stage) => arr.filter((p) => p.stage === stage).length;
+  const demos = purchases.filter((p) => p.type === "demo");
+  const demoSold = demos.filter((p) => p.saleDate);
   console.log(`\nLoaded demo data into "${dbName}" (today = ${todayIso}):`);
-  console.log(`  ${vehicles.length} vehicles, ${finance.length} finance cases, ${insurance.length} policies, ${renewals.length} renewal cases, ${incentives.length} payouts`);
-  console.log(`  Finance incentive pending: ${inr(sum(finance.filter((f) => !f.incentiveReceived), (f) => f.incentiveAmount))}`);
-  console.log(`  Insurance incentive pending: ${inr(sum(insurance.filter((f) => !f.incentiveReceived), (f) => f.incentiveAmount))}`);
-  console.log(`  Payouts: ${inr(sum(incentives, (p) => p.amount))}`);
-  console.log(`\nDemo logins:  admin / (your admin password)`);
-  for (const u of DEMO_USERS) console.log(`               ${u.username} / ${u.password}   (${u.label})`);
+  console.log(`  ${purchases.length} purchases (${purchases.filter((p) => p.type === "new").length} new, ${demos.length} demo), ${preowned.length} pre-owned`);
+  console.log(`  ${finance.length} finance, ${insurance.length} insurance, ${renewals.length} renewal payouts, ${pendingInvoices.length} invoices`);
+  console.log(
+    `  New cars this month: ${newThisMonth.length} · not billed ${count(newThisMonth, "not_billed")} · billed ${count(newThisMonth, "billed")} · collected ${count(newThisMonth, "collected")} · short-paid ${count(newThisMonth, "short_paid")}`,
+  );
+  console.log(
+    `  Demo cars: ${demos.length - demoSold.length} in stock, ${demoSold.length} sold, net ₹${(demoSold.reduce((t, p) => t + p.netProfit, 0) / 100).toLocaleString("en-IN")}`,
+  );
+  console.log(`\nDemo logins:  admin / (your admin password, default "chasis")`);
+  for (const u of DEMO_USERS) console.log(`               ${u.username.padEnd(9)} / ${u.password.padEnd(14)} ${u.label}`);
 } catch (err) {
   console.error("Seeding failed:", err.message);
+  if (err.errInfo) console.error(JSON.stringify(err.errInfo, null, 2).slice(0, 2000));
   process.exitCode = 1;
 } finally {
   await client.close();
