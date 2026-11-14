@@ -1,0 +1,106 @@
+import type { AuditAction, AuditEntity } from "@/lib/types";
+
+/** Wording for activity-log entries (overview and the admin activity page). */
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  create: "created",
+  update: "updated",
+  delete: "deleted",
+  login: "signed in",
+  login_failed: "failed to sign in",
+  logout: "signed out",
+  denied: "was denied access",
+};
+
+export const AUDIT_ENTITY_LABELS: Record<AuditEntity, string> = {
+  purchase: "purchase",
+  preowned: "pre-owned car",
+  finance: "finance payout",
+  insurance: "insurance payout",
+  renewal: "renewal payout",
+  settings: "constants",
+  options: "option list",
+  auth: "session",
+  user: "user account",
+  access: "page",
+};
+
+/** Where an entry's record can be opened, if it still exists. */
+export function auditHref(entity: AuditEntity, entityId?: string): string | undefined {
+  if (!entityId || !/^[a-f0-9]{24}$/.test(entityId)) return undefined;
+  const base = { purchase: "/purchases", preowned: "/preowned", finance: "/finance", insurance: "/insurance", renewal: "/renewals", user: "/admin/users" } as const;
+  const b = base[entity as keyof typeof base];
+  return b ? `${b}/${entityId}` : undefined;
+}
+
+/** Readable names for document fields in the change list. */
+export const FIELD_LABELS: Record<string, string> = {
+  commissionNo: "Commission no",
+  chassisNumber: "Chassis",
+  purchaseDate: "Date of purchase",
+  type: "Type",
+  location: "Location",
+  customerName: "Customer",
+  benzInvoiceNo: "Mercedes-Benz inv no",
+  grade: "Grade",
+  carClass: "Class",
+  model: "Model",
+  basicPrice: "Basic price",
+  salesMeasure: "Sales measure",
+  demoDiscount: "Demo discount",
+  lossAllowance: "Loss allowance",
+  taxableAmount: "Purchase total",
+  purchaseGstRateBp: "Purchase GST rate",
+  gstAmount: "GST",
+  finalPrice: "Total purchase",
+  fcRateBp: "FC rate",
+  lockInDays: "Lock-in days",
+  deflectDate: "Deflect date",
+  saleDate: "Sale date",
+  soldTo: "Sold to",
+  salePrice: "Selling price",
+  saleGstRateBp: "Sale GST rate",
+  saleGst: "Sale GST",
+  saleTotal: "Total SP",
+  priceDifference: "A (SP − purchase)",
+  lossClaim: "B (loss claim)",
+  saleSalesMeasure: "C (sales measure on sale)",
+  netProfit: "Net profit / loss",
+  claimAmount: "Amount",
+  claimGst: "GST",
+  claimTotal: "Total receivable",
+  serviceGstRateBp: "GST rate",
+  tdsRateBp: "TDS rate",
+  invoiceNo: "Invoice no",
+  invoiceDate: "Invoice date",
+  receipts: "Receipts",
+  tdsAmount: "TDS",
+  receivedAmount: "Received",
+  receiptNo: "Receipt no",
+  receiptDate: "Receipt date",
+  balance: "Balance",
+  stage: "Stage",
+  provider: "Provider",
+  loanAmount: "Loan value",
+  contractNo: "Contract no",
+  disbursalDate: "Disbursal date",
+  policyNumber: "Policy no",
+  odPremium: "OD premium",
+  policyStartDate: "Policy start",
+  policyEndDate: "Policy end",
+  dealRef: "Commission / stock no",
+  notes: "Notes",
+  stockNo: "Stock no",
+  registrationNo: "Registration no",
+  make: "Make",
+  yearOfMake: "Year",
+  sellerName: "Bought from",
+  purchasePrice: "Purchase price",
+  intendedUse: "Use",
+  buyerName: "Sold to",
+  role: "Role",
+  active: "Active",
+  permissions: "Permissions",
+  tokenVersion: "Sessions revoked",
+  mode: "Mode",
+  options: "Options",
+};
