@@ -6,6 +6,7 @@ import { requireUser, type CurrentUser } from "@/lib/auth/dal";
 import { can, type Permission } from "@/lib/permissions";
 import { parseForm, rawValues, type FormState } from "@/lib/form-state";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/repo/errors";
+import { receiptSchema, type ReceiptInput } from "@/lib/validation/schemas";
 
 export function errorState(err: unknown, values: Record<string, string>): FormState {
   if (err instanceof ValidationError) {
@@ -27,10 +28,17 @@ function readIdAndVersion(formData: FormData): { id?: string; version: number } 
   };
 }
 
-function done(basePath: string, flag: "saved" | "deleted"): never {
+function done(basePath: string, flag: "saved" | "deleted", returnTo?: string): never {
   revalidatePath(basePath);
   revalidatePath("/overview");
-  redirect(`${basePath}?${flag}=1`);
+  if (basePath === "/purchases") revalidatePath("/demo");
+  redirect(returnTo ? `${returnTo}?${flag}=1` : `${basePath}?${flag}=1`);
+}
+
+/** Only same-module detail pages are valid return targets (no open redirects). */
+function safeReturn(formData: FormData, basePath: string): string | undefined {
+  const raw = formData.get("returnTo");
+  return typeof raw === "string" && new RegExp(`^${basePath}/[a-f0-9]{24}$`).test(raw) ? raw : undefined;
 }
 
 export const FORBIDDEN = "You do not have permission to do this. Ask an admin for access.";
@@ -61,7 +69,7 @@ export async function runSave<S extends z.ZodType>(
   } catch (err) {
     return errorState(err, rawValues(formData));
   }
-  done(basePath, "saved");
+  done(basePath, "saved", safeReturn(formData, basePath));
 }
 
 export async function runDelete(
@@ -80,4 +88,45 @@ export async function runDelete(
     return errorState(err, {});
   }
   done(basePath, "deleted");
+}
+
+/** Adds one receipt to an existing record; `permission` is the module's receipt right. Stays on the record. */
+export async function runReceipt(
+  formData: FormData,
+  basePath: string,
+  permission: Permission,
+  save: (id: string, version: number, data: ReceiptInput, user: CurrentUser) => Promise<void>,
+): Promise<FormState> {
+  const user = await requireUser();
+  if (!can(user, permission)) return { message: FORBIDDEN, values: rawValues(formData) };
+  const parsed = parseForm(receiptSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { id, version } = readIdAndVersion(formData);
+  if (!id) return { message: "Missing record id." };
+  try {
+    await save(id, version, parsed.data, user);
+  } catch (err) {
+    return errorState(err, rawValues(formData));
+  }
+  done(basePath, "saved", `${basePath}/${id}`);
+}
+
+/** Removes one receipt from a record. */
+export async function runReceiptRemove(
+  formData: FormData,
+  basePath: string,
+  permission: Permission,
+  remove: (id: string, version: number, receiptId: string, user: CurrentUser) => Promise<void>,
+): Promise<FormState> {
+  const user = await requireUser();
+  if (!can(user, permission)) return { message: FORBIDDEN };
+  const { id, version } = readIdAndVersion(formData);
+  const receiptId = formData.get("receiptId");
+  if (!id || typeof receiptId !== "string" || !/^[a-z0-9]{1,24}$/.test(receiptId)) return { message: "Missing receipt." };
+  try {
+    await remove(id, version, receiptId, user);
+  } catch (err) {
+    return errorState(err, {});
+  }
+  done(basePath, "saved", `${basePath}/${id}`);
 }

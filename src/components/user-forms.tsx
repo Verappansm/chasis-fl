@@ -96,15 +96,31 @@ function Panel({ title, description, children }: { title: string; description?: 
 
 /* ------------------------------------------------------ permission matrix */
 
-const ACTIONS = [
-  { key: "view", label: "View" },
-  { key: "edit", label: "Create & edit" },
-  { key: "delete", label: "Delete" },
+/** Columns of the permission grid. Pre-owned has no invoice loop, so its "edit" sits in the Invoice column. */
+const COLUMNS = [
+  { key: "view", label: "View", hint: "" },
+  { key: "invoice", label: "Invoice", hint: "Create & edit, up to raising the invoice" },
+  { key: "receipt", label: "Receipt", hint: "Record the receipt after the invoice" },
+  { key: "delete", label: "Delete", hint: "" },
 ] as const;
 
-const ROWS: { key: string; label: string; actions: readonly ("view" | "edit" | "delete")[] }[] = [
-  { key: "overview", label: "Overview dashboard", actions: ["view"] },
-  ...MODULES.map((m) => ({ key: m.key, label: m.label, actions: ["view", "edit", "delete"] as const })),
+type Column = (typeof COLUMNS)[number]["key"];
+
+const ROWS: { key: string; label: string; cells: Partial<Record<Column, string>> }[] = [
+  { key: "overview", label: "Overview dashboard", cells: { view: "view" } },
+  ...MODULES.map((m) => {
+    const acts = m.actions as readonly string[];
+    return {
+      key: m.key,
+      label: m.label,
+      cells: {
+        view: "view",
+        invoice: acts.includes("invoice") ? "invoice" : acts.includes("edit") ? "edit" : undefined,
+        receipt: acts.includes("receipt") ? "receipt" : undefined,
+        delete: "delete",
+      },
+    };
+  }),
 ];
 
 function PermissionMatrix({
@@ -126,7 +142,7 @@ function PermissionMatrix({
     else {
       next.delete(perm);
       // Removing view removes everything that depends on it.
-      if (action === "view") for (const a of ["edit", "delete"]) next.delete(`${mod}:${a}` as Permission);
+      if (action === "view") for (const a of ["edit", "invoice", "receipt", "delete"]) next.delete(`${mod}:${a}` as Permission);
     }
     onChange(normalizePermissions([...next]));
   };
@@ -152,9 +168,9 @@ function PermissionMatrix({
           <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-2.5 text-left">Area</th>
-              {ACTIONS.map((a) => (
-                <th key={a.key} className="px-4 py-2.5 text-center">
-                  {a.label}
+              {COLUMNS.map((c) => (
+                <th key={c.key} className="px-4 py-2.5 text-center" title={c.hint || undefined}>
+                  {c.label}
                 </th>
               ))}
             </tr>
@@ -163,11 +179,13 @@ function PermissionMatrix({
             {ROWS.map((row) => (
               <tr key={row.key}>
                 <td className="px-4 py-2.5 font-medium text-slate-800">{row.label}</td>
-                {ACTIONS.map((a) => {
-                  if (!row.actions.includes(a.key)) return <td key={a.key} />;
-                  const perm = `${row.key}:${a.key}` as Permission;
+                {COLUMNS.map((c) => {
+                  const action = row.cells[c.key];
+                  if (!action) return <td key={c.key} />;
+                  const perm = `${row.key}:${action}` as Permission;
+                  const label = action === "edit" ? "Create & edit" : c.label;
                   return (
-                    <td key={a.key} className="px-4 py-2.5 text-center">
+                    <td key={c.key} className="px-4 py-2.5 text-center">
                       <input
                         type="checkbox"
                         name="permissions"
@@ -175,7 +193,8 @@ function PermissionMatrix({
                         checked={disabled || set.has(perm)}
                         disabled={disabled}
                         onChange={(e) => toggle(perm, e.target.checked)}
-                        aria-label={`${row.label}: ${a.label}`}
+                        aria-label={`${row.label}: ${label}`}
+                        title={label}
                         className="size-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
                     </td>
@@ -187,7 +206,9 @@ function PermissionMatrix({
         </table>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        {disabled ? "Admins always have full access, including user management." : "Create & edit and Delete automatically include View."}
+        {disabled
+          ? "Admins always have full access, including user management and constants."
+          : "Invoice = create & edit up to raising the invoice. Receipt = record the receipt after it. Every right includes View. For Pre-owned, the Invoice column means Create & edit."}
       </p>
       {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
     </div>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireUser } from "@/lib/auth/dal";
-import { MODULES, ROLE_LABELS, can } from "@/lib/permissions";
+import { MODULES, ROLE_LABELS, can, type Permission } from "@/lib/permissions";
 import { ChangePasswordForm } from "@/components/user-forms";
 import { Card, PageHeader, TableSkeleton } from "@/components/ui";
 import { changePasswordAction } from "./actions";
@@ -23,12 +23,10 @@ async function Account() {
   const user = await requireUser();
   const rows = [
     { label: "Overview dashboard", view: can(user, "overview:view") },
-    ...MODULES.map((m) => ({
-      label: m.label,
-      view: can(user, `${m.key}:view`),
-      edit: can(user, `${m.key}:edit`),
-      del: can(user, `${m.key}:delete`),
-    })),
+    ...MODULES.map((m) => {
+      const has = (a: string) => ((m.actions as readonly string[]).includes(a) ? can(user, `${m.key}:${a}` as Permission) : undefined);
+      return { label: m.label, view: has("view"), invoice: has("invoice") ?? has("edit"), receipt: has("receipt"), del: has("delete") };
+    }),
   ];
   const yes = (v?: boolean) => (v === undefined ? "" : v ? "Yes" : "No");
 
@@ -52,7 +50,8 @@ async function Account() {
               <tr>
                 <th className="py-2 pr-6">Area</th>
                 <th className="py-2 pr-6">View</th>
-                <th className="py-2 pr-6">Create &amp; edit</th>
+                <th className="py-2 pr-6">Invoice (create &amp; edit)</th>
+                <th className="py-2 pr-6">Receipt</th>
                 <th className="py-2">Delete</th>
               </tr>
             </thead>
@@ -61,7 +60,8 @@ async function Account() {
                 <tr key={r.label}>
                   <td className="py-2 pr-6 font-medium text-slate-800">{r.label}</td>
                   <td className="py-2 pr-6">{yes(r.view)}</td>
-                  <td className="py-2 pr-6">{"edit" in r ? yes(r.edit) : ""}</td>
+                  <td className="py-2 pr-6">{"invoice" in r ? yes(r.invoice) : ""}</td>
+                  <td className="py-2 pr-6">{"receipt" in r ? yes(r.receipt) : ""}</td>
                   <td className="py-2">{"del" in r ? yes(r.del) : ""}</td>
                 </tr>
               ))}

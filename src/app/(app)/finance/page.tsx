@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { AccessNote } from "@/components/access-note";
 import Link from "next/link";
 import { Suspense } from "react";
 import { requirePermission } from "@/lib/auth/dal";
 import { IfCan } from "@/components/if-can";
-import { AGEING_DAYS, listFinance, type ReceivedFilter } from "@/lib/repo/modules";
-import { daysSince, formatDate, formatMoney } from "@/lib/format";
+import { listFinance, parseStage } from "@/lib/repo/modules";
+import { parsePeriod } from "@/lib/periods";
+import { dateToInput, formatMoney } from "@/lib/format";
+import { DateText } from "@/components/date-text";
+import { ClaimRefs, LIST_PERIOD_OPTIONS, STAGE_OPTIONS, StageBadge } from "@/components/claims";
 import {
-  Badge,
   Card,
   DataTable,
   EmptyState,
@@ -21,26 +24,21 @@ import {
   one,
 } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Finance" };
-
-const STATUSES = [
-  { value: "all", label: "All" },
-  { value: "pending", label: "Incentive pending" },
-  { value: "received", label: "Incentive received" },
-];
+export const metadata: Metadata = { title: "Finance payout" };
 
 export default function FinancePage({ searchParams }: PageProps<"/finance">) {
   return (
     <>
       <PageHeader
-        title="Finance"
-        description="Loan cases, finance incentive (payout) tracking and vehicle margin per chassis."
+        title="Finance payout"
+        description="Payout from the bank / NBFC on a car loan, invoiced to the finance provider and tracked to receipt."
         action={
-          <IfCan permission="finance:edit">
-            <LinkButton href="/finance/new" tour="new-record">New finance case</LinkButton>
+          <IfCan permission="finance:invoice">
+            <LinkButton href="/finance/new" tour="new-record">New finance payout</LinkButton>
           </IfCan>
         }
       />
+      <AccessNote module="finance" />
       <Suspense fallback={<TableSkeleton />}>
         <FinanceList searchParams={searchParams} />
       </Suspense>
@@ -52,73 +50,74 @@ async function FinanceList({ searchParams }: { searchParams: PageProps<"/finance
   await requirePermission("finance:view");
   const sp = await searchParams;
   const q = one(sp.q);
-  const statusRaw = one(sp.status);
-  const status: ReceivedFilter = statusRaw === "pending" || statusRaw === "received" ? statusRaw : "all";
+  const stage = parseStage(one(sp.stage));
+  const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
-  const result = await listFinance({ q, status, page });
+  const result = await listFinance({ q, stage, period, page });
 
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} deleted={one(sp.deleted) === "1"} />
       <Card tour="finance-list">
-        <ListToolbar basePath="/finance" q={q} status={status} statuses={STATUSES} placeholder="Search chassis or provider" />
+        <ListToolbar
+          basePath="/finance"
+          q={q}
+          placeholder="Search chassis, commission, provider, contract, invoice"
+          filters={[
+            { param: "stage", label: "Stage", value: stage, options: STAGE_OPTIONS },
+            { param: "period", label: "Period", value: period, options: LIST_PERIOD_OPTIONS },
+          ]}
+        />
         {result.items.length === 0 ? (
-          <EmptyState title="No finance cases found">{q ? "Try a different search." : "Create the first finance case."}</EmptyState>
+          <EmptyState title="No finance payouts found" />
         ) : (
           <DataTable
             head={
               <>
+                <Th>Commission / stock</Th>
                 <Th>Chassis</Th>
                 <Th>Provider</Th>
+                <Th>Contract no</Th>
+                <Th>Disbursed</Th>
                 <Th right>Loan</Th>
-                <Th right>Incentive</Th>
-                <Th>Initiated</Th>
-                <Th>Status</Th>
-                <Th right>Purchase</Th>
-                <Th right>Selling</Th>
-                <Th right>Margin</Th>
+                <Th right>Total</Th>
+                <Th>Invoice / receipt</Th>
+                <Th>Stage</Th>
               </>
             }
           >
-            {result.items.map(({ doc, vehicle }) => {
-              const margin =
-                vehicle?.purchasePrice !== undefined && vehicle?.sellingPrice !== undefined
-                  ? vehicle.sellingPrice - vehicle.purchasePrice
-                  : undefined;
-              const age = daysSince(doc.initiatedDate);
-              return (
-                <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                  <Td mono>
-                    <Link href={`/finance/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
-                      {doc.chassisNumber}
-                    </Link>
-                  </Td>
-                  <Td>{doc.provider}</Td>
-                  <Td right>{formatMoney(doc.loanAmount)}</Td>
-                  <Td right>{formatMoney(doc.incentiveAmount)}</Td>
-                  <Td>{formatDate(doc.initiatedDate)}</Td>
-                  <Td>
-                    {doc.incentiveReceived ? (
-                      <Badge tone="green">Received {formatDate(doc.receivedDate)}</Badge>
-                    ) : (
-                      <Badge tone={age > AGEING_DAYS ? "red" : "amber"}>Pending · {age}d</Badge>
-                    )}
-                  </Td>
-                  <Td right>{formatMoney(vehicle?.purchasePrice)}</Td>
-                  <Td right>{formatMoney(vehicle?.sellingPrice)}</Td>
-                  <Td right>
-                    {margin === undefined ? (
-                      "—"
-                    ) : (
-                      <span className={margin < 0 ? "text-red-600" : "text-emerald-700"}>{formatMoney(margin)}</span>
-                    )}
-                  </Td>
-                </tr>
-              );
-            })}
+            {result.items.map((doc) => (
+              <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
+                <Td mono>
+                  <Link href={`/finance/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
+                    {doc.dealRef}
+                  </Link>
+                </Td>
+                <Td mono>{doc.chassisNumber}</Td>
+                <Td>{doc.provider}</Td>
+                <Td mono>{doc.contractNo}</Td>
+                <Td>
+                  <DateText iso={dateToInput(doc.disbursalDate)} />
+                </Td>
+                <Td right>{formatMoney(doc.loanAmount)}</Td>
+                <Td right>{formatMoney(doc.claimTotal)}</Td>
+                <Td>
+                  <ClaimRefs claim={doc} />
+                </Td>
+                <Td>
+                  <StageBadge claim={doc} />
+                </Td>
+              </tr>
+            ))}
           </DataTable>
         )}
-        <Pagination basePath="/finance" page={result.page} pageCount={result.pageCount} total={result.total} params={{ q, status }} />
+        <Pagination
+          basePath="/finance"
+          page={result.page}
+          pageCount={result.pageCount}
+          total={result.total}
+          params={{ q, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
+        />
       </Card>
     </>
   );

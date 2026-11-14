@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
+import { AccessNote } from "@/components/access-note";
 import Link from "next/link";
 import { Suspense } from "react";
 import { requirePermission } from "@/lib/auth/dal";
 import { IfCan } from "@/components/if-can";
 import { can } from "@/lib/permissions";
-import { listRenewals, upcomingExpiries, type RenewalFilter } from "@/lib/repo/modules";
-import { dateToInput, formatDate, formatMoney } from "@/lib/format";
+import { listRenewals, parseStage, upcomingExpiries } from "@/lib/repo/modules";
+import { parsePeriod } from "@/lib/periods";
+import { addDays } from "@/lib/calc";
+import { dateToInput, formatMoney } from "@/lib/format";
 import { todayIso } from "@/lib/validation/fields";
-import { RENEWAL_STATUSES, RENEWAL_STATUS_LABELS, type RenewalStatus } from "@/lib/types";
+import { DateText } from "@/components/date-text";
+import { ClaimRefs, LIST_PERIOD_OPTIONS, STAGE_OPTIONS, StageBadge } from "@/components/claims";
 import {
   Badge,
   Card,
@@ -25,33 +29,21 @@ import {
   one,
 } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Renewal" };
-
-const STATUSES = [
-  { value: "open", label: "Open" },
-  ...RENEWAL_STATUSES.map((s) => ({ value: s, label: RENEWAL_STATUS_LABELS[s] })),
-  { value: "all", label: "All" },
-];
-
-const STATUS_TONE: Record<RenewalStatus, "amber" | "indigo" | "green" | "slate"> = {
-  due: "amber",
-  contacted: "indigo",
-  renewed: "green",
-  lost: "slate",
-};
+export const metadata: Metadata = { title: "Renewal payout" };
 
 export default function RenewalsPage({ searchParams }: PageProps<"/renewals">) {
   return (
     <>
       <PageHeader
-        title="Renewal"
-        description="Insurance renewal follow-ups, so recurring commission is not lost to competitors."
+        title="Renewal payout"
+        description="Payout on renewing a policy we sold. Only cars insured with us can be renewed here."
         action={
-          <IfCan permission="renewals:edit">
-            <LinkButton href="/renewals/new" tour="new-record">New renewal case</LinkButton>
+          <IfCan permission="renewals:invoice">
+            <LinkButton href="/renewals/new" tour="new-record">New renewal payout</LinkButton>
           </IfCan>
         }
       />
+      <AccessNote module="renewals" />
       <Suspense fallback={<TableSkeleton />}>
         <Expiring />
       </Suspense>
@@ -64,45 +56,53 @@ export default function RenewalsPage({ searchParams }: PageProps<"/renewals">) {
 
 async function Expiring() {
   const user = await requirePermission("renewals:view");
-  const canEdit = can(user, "renewals:edit");
+  const canEdit = can(user, "renewals:invoice");
   const policies = await upcomingExpiries(45);
   if (!policies.length) return null;
+  const today = todayIso();
   return (
     <Card className="mb-6 border-amber-200" tour="renewals-expiring">
       <div className="border-b border-amber-100 bg-amber-50/60 px-4 py-3">
-        <h2 className="text-sm font-semibold text-amber-900">Policies expiring soon without a renewal case</h2>
-        <p className="text-xs text-amber-800">Expiring within 45 days (or lapsed in the last 15) and not yet followed up.</p>
+        <h2 className="text-sm font-semibold text-amber-900">Our policies expiring soon, not yet renewed</h2>
+        <p className="text-xs text-amber-800">Expiring within 45 days (or lapsed in the last 15). Call the customer before a competitor does.</p>
       </div>
       <DataTable
         head={
           <>
             <Th>Chassis</Th>
+            <Th>Commission / stock</Th>
             <Th>Provider</Th>
             <Th>Policy</Th>
-            <Th right>Premium</Th>
+            <Th right>OD premium</Th>
             <Th>Expires</Th>
             <Th />
           </>
         }
       >
         {policies.map((p) => {
-          const lapsed = dateToInput(p.policyEndDate) < todayIso();
-          const sp = new URLSearchParams({ chassis: p.chassisNumber, due: dateToInput(p.policyEndDate) });
+          const end = dateToInput(p.policyEndDate);
+          const lapsed = end < today;
+          const sp = new URLSearchParams({
+            chassis: p.chassisNumber,
+            provider: p.provider,
+            start: dateToInput(addDays(p.policyEndDate, 1)),
+          });
           return (
-            <tr key={p._id.toHexString()}>
+            <tr key={p.id}>
               <Td mono>{p.chassisNumber}</Td>
+              <Td mono>{p.dealRef}</Td>
               <Td>{p.provider}</Td>
-              <Td>{p.policyNumber ?? "—"}</Td>
-              <Td right>{formatMoney(p.premiumAmount)}</Td>
+              <Td mono>{p.policyNumber ?? "—"}</Td>
+              <Td right>{formatMoney(p.odPremium)}</Td>
               <Td>
                 <Badge tone={lapsed ? "red" : "amber"}>
-                  {lapsed ? "Lapsed" : "Due"} {formatDate(p.policyEndDate)}
+                  {lapsed ? "Lapsed" : "Due"} <DateText iso={end} />
                 </Badge>
               </Td>
               <Td right>
                 {canEdit && (
                   <Link href={`/renewals/new?${sp.toString()}`} className={buttonStyles.secondary}>
-                    Start follow-up
+                    Record renewal
                   </Link>
                 )}
               </Td>
@@ -118,57 +118,74 @@ async function RenewalList({ searchParams }: { searchParams: PageProps<"/renewal
   await requirePermission("renewals:view");
   const sp = await searchParams;
   const q = one(sp.q);
-  const statusRaw = one(sp.status) ?? "open";
-  const status = (STATUSES.some((s) => s.value === statusRaw) ? statusRaw : "open") as RenewalFilter;
+  const stage = parseStage(one(sp.stage));
+  const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
-  const result = await listRenewals({ q, status, page });
-  const today = todayIso();
+  const result = await listRenewals({ q, stage, period, page });
 
   return (
     <>
       <Flash saved={one(sp.saved) === "1"} deleted={one(sp.deleted) === "1"} />
       <Card tour="renewals-list">
-        <ListToolbar basePath="/renewals" q={q} status={status} statuses={STATUSES} placeholder="Search chassis or notes" />
+        <ListToolbar
+          basePath="/renewals"
+          q={q}
+          placeholder="Search chassis, commission, provider, policy, invoice"
+          filters={[
+            { param: "stage", label: "Stage", value: stage, options: STAGE_OPTIONS },
+            { param: "period", label: "Period", value: period, options: LIST_PERIOD_OPTIONS },
+          ]}
+        />
         {result.items.length === 0 ? (
-          <EmptyState title="No renewal cases found" />
+          <EmptyState title="No renewal payouts found" />
         ) : (
           <DataTable
             head={
               <>
                 <Th>Chassis</Th>
-                <Th>Due date</Th>
-                <Th>Status</Th>
-                <Th>Next follow-up</Th>
-                <Th>Notes</Th>
+                <Th>Commission / stock</Th>
+                <Th>Provider</Th>
+                <Th>Policy</Th>
+                <Th>Policy period</Th>
+                <Th right>OD premium</Th>
+                <Th right>Total</Th>
+                <Th>Invoice / receipt</Th>
+                <Th>Stage</Th>
               </>
             }
           >
-            {result.items.map((doc) => {
-              const open = doc.status === "due" || doc.status === "contacted";
-              const overdue = open && dateToInput(doc.dueDate) < today;
-              return (
-                <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                  <Td mono>
-                    <Link href={`/renewals/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
-                      {doc.chassisNumber}
-                    </Link>
-                  </Td>
-                  <Td>
-                    <span className={overdue ? "font-medium text-red-600" : ""}>{formatDate(doc.dueDate)}</span>
-                  </Td>
-                  <Td>
-                    <Badge tone={STATUS_TONE[doc.status]}>{RENEWAL_STATUS_LABELS[doc.status]}</Badge>
-                  </Td>
-                  <Td>{formatDate(doc.followUpDate)}</Td>
-                  <Td>
-                    <span className="block max-w-xs truncate">{doc.notes ?? "—"}</span>
-                  </Td>
-                </tr>
-              );
-            })}
+            {result.items.map((doc) => (
+              <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
+                <Td mono>
+                  <Link href={`/renewals/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
+                    {doc.chassisNumber}
+                  </Link>
+                </Td>
+                <Td mono>{doc.dealRef}</Td>
+                <Td>{doc.provider}</Td>
+                <Td mono>{doc.policyNumber ?? "—"}</Td>
+                <Td>
+                  <DateText iso={dateToInput(doc.policyStartDate)} /> → <DateText iso={dateToInput(doc.policyEndDate)} />
+                </Td>
+                <Td right>{formatMoney(doc.odPremium)}</Td>
+                <Td right>{formatMoney(doc.claimTotal)}</Td>
+                <Td>
+                  <ClaimRefs claim={doc} />
+                </Td>
+                <Td>
+                  <StageBadge claim={doc} />
+                </Td>
+              </tr>
+            ))}
           </DataTable>
         )}
-        <Pagination basePath="/renewals" page={result.page} pageCount={result.pageCount} total={result.total} params={{ q, status }} />
+        <Pagination
+          basePath="/renewals"
+          page={result.page}
+          pageCount={result.pageCount}
+          total={result.total}
+          params={{ q, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
+        />
       </Card>
     </>
   );

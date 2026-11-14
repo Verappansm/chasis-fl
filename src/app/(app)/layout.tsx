@@ -16,7 +16,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
             <div className="grid size-8 place-items-center rounded-lg bg-indigo-500 text-sm font-bold text-white">C</div>
             <div>
               <p className="text-sm font-semibold text-white">Chasis ERP</p>
-              <p className="text-xs text-slate-400">F&amp;I desk</p>
+              <p className="text-xs text-slate-400">VST Titanium Motors</p>
             </div>
           </div>
           <div className="pb-3 lg:flex-1">
@@ -57,8 +57,17 @@ async function SideNav() {
   if (!user) return null;
   const items: NavItem[] = [
     ...(can(user, "overview:view") ? [{ href: "/overview", label: "Overview" }] : []),
-    ...MODULES.filter((m) => can(user, `${m.key}:view`)).map((m) => ({ href: m.href, label: m.label })),
-    ...(user.role === "admin" ? [{ href: "/admin/users", label: "Users" }] : []),
+    ...MODULES.filter((m) => can(user, `${m.key}:view`)).flatMap((m) =>
+      // Demo stock is a view of demo purchases, right under Purchase.
+      m.key === "purchases" ? [{ href: m.href, label: m.label }, { href: "/demo", label: "Demo stock" }] : [{ href: m.href, label: m.label }],
+    ),
+    ...(user.role === "admin"
+      ? [
+          { href: "/admin/users", label: "Users" },
+          { href: "/admin/activity", label: "Activity log" },
+          { href: "/admin/settings", label: "Constants" },
+        ]
+      : []),
   ];
   return <NavLinks items={items} />;
 }

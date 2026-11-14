@@ -24,16 +24,14 @@ export default function UsersPage({ searchParams }: PageProps<"/admin/users">) {
   );
 }
 
-/** e.g. "Overview · Finance (V E D) · Insurance (V)". */
+const FLAG: Record<string, string> = { view: "V", invoice: "I", receipt: "R", edit: "E", delete: "D" };
+
+/** e.g. "Overview · Purchase (V I R) · Finance payout (V)". */
 function AccessSummary({ permissions }: { permissions: Permission[] }) {
   const parts: string[] = [];
   if (permissions.includes("overview:view")) parts.push("Overview");
   for (const m of MODULES) {
-    const flags = [
-      permissions.includes(`${m.key}:view`) && "V",
-      permissions.includes(`${m.key}:edit`) && "E",
-      permissions.includes(`${m.key}:delete`) && "D",
-    ].filter(Boolean);
+    const flags = (m.actions as readonly string[]).filter((a) => (permissions as string[]).includes(`${m.key}:${a}`)).map((a) => FLAG[a]);
     if (flags.length) parts.push(`${m.label} (${flags.join(" ")})`);
   }
   return <span className="text-slate-600">{parts.length ? parts.join(" · ") : "No access"}</span>;
@@ -86,7 +84,7 @@ async function UserList({ searchParams }: { searchParams: PageProps<"/admin/user
           })}
         </DataTable>
         <div className="border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
-          V = view · E = create &amp; edit · D = delete. Users are deactivated rather than deleted so the audit trail stays intact.
+          V = view · I = invoice (create &amp; edit up to invoice) · R = receipt · E = create &amp; edit · D = delete. Users are deactivated rather than deleted so the audit trail stays intact.
         </div>
       </Card>
     </>

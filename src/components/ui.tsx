@@ -162,24 +162,40 @@ export function Pagination({
   );
 }
 
-/** GET search form + status filter pills; works without JavaScript. */
+export interface FilterGroup {
+  /** Query-string parameter, e.g. "stage". */
+  param: string;
+  label: string;
+  value: string;
+  options: readonly { value: string; label: string }[];
+}
+
+/** GET search form + rows of filter pills; works without JavaScript. Each pill keeps the other filters. */
 export function ListToolbar({
   basePath,
   q,
   placeholder,
-  status,
-  statuses,
+  filters = [],
 }: {
   basePath: string;
   q?: string;
   placeholder: string;
-  status?: string;
-  statuses?: { value: string; label: string }[];
+  filters?: FilterGroup[];
 }) {
+  const hrefWith = (param: string, value: string) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    for (const f of filters) {
+      const v = f.param === param ? value : f.value;
+      if (v && v !== f.options[0]?.value) sp.set(f.param, v);
+    }
+    const qs = sp.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-3 border-b border-slate-200 p-4">
       <form action={basePath} method="get" className="flex w-full max-w-md gap-2">
-        {status && <input type="hidden" name="status" value={status} />}
+        {filters.map((f) => f.value !== f.options[0]?.value && <input key={f.param} type="hidden" name={f.param} value={f.value} />)}
         <input
           type="search"
           name="q"
@@ -192,28 +208,26 @@ export function ListToolbar({
           Search
         </button>
       </form>
-      {statuses && (
-        <nav className="flex flex-wrap gap-1" aria-label="Filter by status">
-          {statuses.map((s) => {
-            const sp = new URLSearchParams();
-            if (q) sp.set("q", q);
-            sp.set("status", s.value);
-            const active = s.value === status;
+      {filters.map((f) => (
+        <nav key={f.param} className="flex flex-wrap items-center gap-1" aria-label={`Filter by ${f.label.toLowerCase()}`}>
+          <span className="mr-1 w-14 text-xs font-medium text-slate-500">{f.label}</span>
+          {f.options.map((o) => {
+            const active = o.value === f.value;
             return (
               <Link
-                key={s.value}
-                href={`${basePath}?${sp.toString()}`}
+                key={o.value}
+                href={hrefWith(f.param, o.value)}
                 aria-current={active ? "page" : undefined}
                 className={`rounded-full px-3 py-1 text-xs font-medium ${
                   active ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                {s.label}
+                {o.label}
               </Link>
             );
           })}
         </nav>
-      )}
+      ))}
     </div>
   );
 }

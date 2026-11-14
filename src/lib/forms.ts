@@ -1,181 +1,308 @@
-import type { SectionDef } from "@/components/record-form";
+import type { FieldDef, SectionDef } from "@/components/record-form";
 import { dateToInput, paiseToInput } from "@/lib/format";
 import {
-  PAYEE_TYPES,
-  PAYEE_TYPE_LABELS,
-  RENEWAL_STATUSES,
-  RENEWAL_STATUS_LABELS,
+  GRADES,
+  GRADE_LABELS,
+  PREOWNED_USES,
+  PREOWNED_USE_LABELS,
+  type ClaimFields,
   type FinanceDoc,
-  type IncentiveDoc,
   type InsuranceDoc,
+  type PreownedDoc,
+  type PurchaseDoc,
   type RenewalDoc,
-  type VehicleDoc,
 } from "@/lib/types";
 
 /* Field names here must match the zod schemas in lib/validation/schemas.ts. */
 
-const chassis = { name: "chassisNumber", label: "Chassis number", type: "chassis", required: true, immutable: true } as const;
+const chassis = { name: "chassisNumber", label: "Chassis no", type: "chassis", required: true, immutable: true } as const;
+const notes: FieldDef = { name: "notes", label: "Notes", type: "textarea", wide: true };
 
-export const financeSections: SectionDef[] = [
+/* ---------------------------------------------------------------- purchases */
+
+export const purchaseSections: SectionDef[] = [
   {
-    title: "Vehicle",
-    description: "Purchase and selling price are stored on the vehicle, against the chassis number.",
+    title: "Car",
+    description: "One row per commission no. The same chassis can appear again if the car is sold more than once.",
+    fields: [
+      { name: "commissionNo", label: "Commission no", type: "code", required: true, immutable: true },
+      chassis,
+      { name: "purchaseDate", label: "Date of purchase", type: "date", required: true },
+      {
+        name: "type",
+        label: "Type",
+        type: "text",
+        list: "purchaseType",
+        required: true,
+        maxLength: 40,
+        hint: "Only New cars earn fixed compensation; only Demo cars have a lock-in.",
+      },
+      { name: "location", label: "Location", type: "text", list: "location", required: true, maxLength: 80 },
+      { name: "customerName", label: "Customer name", type: "text", hint: "Required for a New car (booked for this customer)." },
+      { name: "benzInvoiceNo", label: "Inv no (from Mercedes-Benz)", type: "code" },
+      {
+        name: "grade",
+        label: "Grade",
+        type: "select",
+        required: true,
+        options: GRADES.map((g) => ({ value: g, label: GRADE_LABELS[g] })),
+      },
+      { name: "carClass", label: "Class", type: "text", list: "carClass", required: true, maxLength: 60, hint: "e.g. C-Class, GLE, EQS" },
+      { name: "model", label: "Model", type: "text", list: "model", required: true, maxLength: 80, hint: "e.g. GLE 300d 4MATIC" },
+    ],
+  },
+  {
+    title: "Purchase price",
+    description:
+      "Purchase total (taxable) = basic price − sales measure − demo discount − loss allowance. GST is on the purchase total (EVs at the EV rate). Calculated as you type.",
+    fields: [
+      { name: "basicPrice", label: "Basic price (purchase price)", type: "money", required: true },
+      { name: "salesMeasure", label: "Sales measure", type: "money", hint: "Offer that can be given to the customer" },
+      { name: "demoDiscount", label: "Demo discount", type: "money" },
+      { name: "lossAllowance", label: "Loss allowance", type: "money" },
+      { name: "taxable", label: "Purchase total (taxable)", type: "computed", formula: "purchase.taxable" },
+      { name: "deduction", label: "Deduction from basic", type: "computed", formula: "purchase.deduction" },
+      { name: "gst", label: "GST", type: "computed", formula: "purchase.gst" },
+      { name: "final", label: "Total purchase (incl. GST)", type: "computed", formula: "purchase.final", hint: "Purchase total + GST" },
+    ],
+  },
+  {
+    title: "Demo lock-in",
+    description: "A demo car cannot be sold during its lock-in period. After that it is deflected and can be sold.",
+    showWhen: { field: "type", in: ["demo"] },
+    fields: [
+      { name: "lockInDays", label: "Lock-in period (days)", type: "number", hint: "Leave empty for the default from Constants" },
+      { name: "deflect", label: "Deflected on", type: "computed", formula: "purchase.deflect" },
+    ],
+  },
+  {
+    title: "Sale",
+    description: "Record the sale once the car is sold. Finance and insurance payouts can only be added after this.",
+    showWhen: { field: "type", notIn: ["new"] },
+    fields: [
+      { name: "saleDate", label: "Sale date", type: "date" },
+      { name: "soldTo", label: "Sold to", type: "text" },
+      { name: "salePrice", label: "Selling price (before GST)", type: "money" },
+      { name: "saleGst", label: "GST on selling price", type: "computed", formula: "sale.gst" },
+      { name: "saleTotal", label: "Total selling price", type: "computed", formula: "sale.total", wide: true, hint: "Car value; caps the loan value on a finance payout" },
+    ],
+  },
+  {
+    title: "Demo sale: profit or loss",
+    description: "A = total selling price − total purchase (negative is a loss on the car). Net profit / loss = A + B + C.",
+    showWhen: { field: "type", in: ["demo"] },
+    fields: [
+      { name: "diff", label: "A · Total SP − total purchase", type: "computed", formula: "demo.diff", wide: true },
+      { name: "claimHint", label: "Loss claim eligibility", type: "computed", formula: "demo.claimHint", wide: true },
+      { name: "lossClaim", label: "B · Loss claim (Mercedes-Benz)", type: "money", hint: "Normally only when no demo discount was given" },
+      { name: "saleSalesMeasure", label: "C · Sales measure on sale", type: "money" },
+      { name: "net", label: "Net profit / loss (A + B + C)", type: "computed", formula: "demo.net", wide: true },
+    ],
+  },
+  {
+    title: "Fixed compensation invoice",
+    description: "Fixed compensation is a share of the basic price. Raise the invoice for the total receivable to Mercedes-Benz.",
+    showWhen: { field: "type", in: ["new"] },
+    fields: [
+      { name: "fc", label: "Fixed compensation", type: "computed", formula: "purchase.fc" },
+      { name: "fcGst", label: "GST", type: "computed", formula: "purchase.fcGst" },
+      { name: "fcTotal", label: "Total receivable", type: "computed", formula: "purchase.fcTotal", wide: true },
+      { name: "invoiceNo", label: "Invoice no", type: "code", hint: "Entering it marks the invoice as raised" },
+      { name: "invoiceDate", label: "Invoice date", type: "date" },
+    ],
+  },
+  { title: "Notes", fields: [notes] },
+];
+
+export function purchaseValues(doc?: PurchaseDoc | null): Record<string, string> {
+  return {
+    commissionNo: doc?.commissionNo ?? "",
+    chassisNumber: doc?.chassisNumber ?? "",
+    purchaseDate: dateToInput(doc?.purchaseDate),
+    type: doc?.type ?? "new",
+    location: doc?.location ?? "",
+    customerName: doc?.customerName ?? "",
+    benzInvoiceNo: doc?.benzInvoiceNo ?? "",
+    grade: doc?.grade ?? "series",
+    carClass: doc?.carClass ?? "",
+    model: doc?.model ?? "",
+    basicPrice: paiseToInput(doc?.basicPrice),
+    salesMeasure: doc?.salesMeasure ? paiseToInput(doc.salesMeasure) : "",
+    demoDiscount: doc?.demoDiscount ? paiseToInput(doc.demoDiscount) : "",
+    lossAllowance: doc?.lossAllowance ? paiseToInput(doc.lossAllowance) : "",
+    lockInDays: doc?.lockInDays !== undefined ? String(doc.lockInDays) : "",
+    saleDate: dateToInput(doc?.saleDate),
+    soldTo: doc?.soldTo ?? "",
+    salePrice: paiseToInput(doc?.salePrice),
+    lossClaim: doc?.lossClaim ? paiseToInput(doc.lossClaim) : "",
+    saleSalesMeasure: doc?.saleSalesMeasure ? paiseToInput(doc.saleSalesMeasure) : "",
+    invoiceNo: doc?.invoiceNo ?? "",
+    invoiceDate: dateToInput(doc?.invoiceDate),
+    notes: doc?.notes ?? "",
+  };
+}
+
+/* ----------------------------------------------------------------- pre-owned */
+
+export const preownedSections: SectionDef[] = [
+  {
+    title: "Car",
     fields: [
       chassis,
-      { name: "model", label: "Model / variant", type: "text", maxLength: 80 },
-      { name: "purchasePrice", label: "Purchase price", type: "money" },
-      { name: "sellingPrice", label: "Selling price", type: "money" },
-      { name: "customerName", label: "Customer name", type: "text", wide: true },
+      { name: "registrationNo", label: "Registration no", type: "code", maxLength: 20 },
+      { name: "make", label: "Make", type: "text", list: "preownedMake", required: true, maxLength: 60 },
+      { name: "model", label: "Model", type: "text", required: true, maxLength: 80 },
+      { name: "yearOfMake", label: "Year of make", type: "number", maxLength: 4 },
+      {
+        name: "intendedUse",
+        label: "Use",
+        type: "select",
+        required: true,
+        options: PREOWNED_USES.map((u) => ({ value: u, label: PREOWNED_USE_LABELS[u] })),
+        hint: "Taken in exchange for a new car, or bought to resell",
+      },
     ],
   },
   {
-    title: "Finance",
+    title: "Purchase",
     fields: [
-      { name: "provider", label: "Finance provider", type: "text", required: true, hint: "Bank / NBFC, e.g. HDFC Bank" },
-      { name: "loanAmount", label: "Loan amount", type: "money", hint: "Disbursed loan amount (optional)" },
+      { name: "sellerName", label: "Bought from", type: "text", required: true },
+      { name: "purchaseDate", label: "Date of purchase", type: "date", required: true },
+      { name: "purchasePrice", label: "Purchase price", type: "money", required: true },
     ],
   },
   {
-    title: "Finance incentive",
-    description: "Payout due from the finance provider for this case.",
+    title: "Sale",
+    description: "Record the sale once the car is sold. Finance and insurance payouts can only be added after this.",
     fields: [
-      { name: "incentiveAmount", label: "Incentive amount", type: "money", required: true },
-      { name: "initiatedDate", label: "Date initiated", type: "date", required: true },
-      { name: "incentiveReceived", label: "Incentive received", type: "checkbox" },
-      { name: "receivedDate", label: "Date received", type: "date", enabledBy: "incentiveReceived" },
-      { name: "notes", label: "Notes", type: "textarea", wide: true },
+      { name: "saleDate", label: "Sale date", type: "date" },
+      { name: "buyerName", label: "Sold to", type: "text" },
+      { name: "salePrice", label: "Sale price", type: "money" },
+      notes,
     ],
   },
 ];
 
-export function financeValues(doc?: FinanceDoc, vehicle?: VehicleDoc | null): Record<string, string> {
+export function preownedValues(doc?: PreownedDoc | null): Record<string, string> {
   return {
     chassisNumber: doc?.chassisNumber ?? "",
-    model: vehicle?.model ?? "",
-    purchasePrice: paiseToInput(vehicle?.purchasePrice),
-    sellingPrice: paiseToInput(vehicle?.sellingPrice),
-    customerName: vehicle?.customerName ?? "",
-    provider: doc?.provider ?? "",
-    loanAmount: paiseToInput(doc?.loanAmount),
-    incentiveAmount: paiseToInput(doc?.incentiveAmount),
-    initiatedDate: dateToInput(doc?.initiatedDate),
-    incentiveReceived: doc?.incentiveReceived ? "on" : "",
-    receivedDate: dateToInput(doc?.receivedDate),
+    registrationNo: doc?.registrationNo ?? "",
+    make: doc?.make ?? "Mercedes-Benz",
+    model: doc?.model ?? "",
+    yearOfMake: doc?.yearOfMake ? String(doc.yearOfMake) : "",
+    intendedUse: doc?.intendedUse ?? "resale",
+    sellerName: doc?.sellerName ?? "",
+    purchaseDate: dateToInput(doc?.purchaseDate),
+    purchasePrice: paiseToInput(doc?.purchasePrice),
+    saleDate: dateToInput(doc?.saleDate),
+    buyerName: doc?.buyerName ?? "",
+    salePrice: paiseToInput(doc?.salePrice),
     notes: doc?.notes ?? "",
   };
 }
+
+/* ------------------------------------------------------------------- payouts */
+
+const dealRef: FieldDef = {
+  name: "dealRef",
+  label: "Commission no / pre-owned stock no",
+  type: "code",
+  required: true,
+  immutable: true,
+};
+
+const claimSection: SectionDef = {
+  title: "Incentive & invoice",
+  description: "Total = incentive + GST. Entering the invoice no marks the invoice as raised; the receipt is recorded after that.",
+  fields: [
+    { name: "claimAmount", label: "Incentive amount", type: "money", required: true },
+    { name: "claimGst", label: "GST", type: "computed", formula: "claim.gst" },
+    { name: "claimTotal", label: "Total", type: "computed", formula: "claim.total", wide: true },
+    { name: "invoiceNo", label: "Invoice no", type: "code" },
+    { name: "invoiceDate", label: "Invoice date", type: "date" },
+    notes,
+  ],
+};
+
+function claimValues(doc?: Partial<ClaimFields> & { notes?: string } | null) {
+  return {
+    claimAmount: paiseToInput(doc?.claimAmount),
+    invoiceNo: doc?.invoiceNo ?? "",
+    invoiceDate: dateToInput(doc?.invoiceDate),
+    notes: doc?.notes ?? "",
+  };
+}
+
+export const financeSections: SectionDef[] = [
+  {
+    title: "Finance",
+    fields: [
+      dealRef,
+      { name: "provider", label: "Finance provider", type: "text", list: "financeProvider", required: true, hint: "Bank / NBFC, e.g. ICICI Bank" },
+      { name: "loanAmount", label: "Loan value", type: "money", required: true, hint: "Cannot be above the car value" },
+      { name: "contractNo", label: "Contract no", type: "code", required: true },
+      { name: "disbursalDate", label: "Disbursal date", type: "date", required: true },
+    ],
+  },
+  claimSection,
+];
+
+export function financeValues(doc?: FinanceDoc | null, ref?: string): Record<string, string> {
+  return {
+    dealRef: doc?.dealRef ?? ref ?? "",
+    provider: doc?.provider ?? "",
+    loanAmount: paiseToInput(doc?.loanAmount),
+    contractNo: doc?.contractNo ?? "",
+    disbursalDate: dateToInput(doc?.disbursalDate),
+    ...claimValues(doc),
+  };
+}
+
+const policyFields: FieldDef[] = [
+  { name: "policyNumber", label: "Policy no", type: "code", maxLength: 60 },
+  { name: "odPremium", label: "OD premium", type: "money", required: true, hint: "Own-damage premium (the insurance amount)" },
+  { name: "policyStartDate", label: "Policy start date", type: "date", required: true },
+  { name: "policyEndDate", label: "Policy end date", type: "date", required: true, hint: "Drives the renewal reminders" },
+];
 
 export const insuranceSections: SectionDef[] = [
   {
     title: "Policy",
     fields: [
-      chassis,
-      { name: "provider", label: "Insurance provider", type: "text", required: true },
-      { name: "policyNumber", label: "Policy number", type: "text", maxLength: 60 },
-      {
-        name: "policyType",
-        label: "Policy type",
-        type: "select",
-        required: true,
-        options: [
-          { value: "new", label: "New vehicle" },
-          { value: "renewal", label: "Renewal" },
-        ],
-      },
-      { name: "premiumAmount", label: "Insurance amount (premium)", type: "money", required: true },
-      { name: "policyStartDate", label: "Policy start date", type: "date" },
-      { name: "policyEndDate", label: "Policy end date", type: "date", hint: "Drives the renewal reminders" },
+      dealRef,
+      { name: "provider", label: "Insurance provider", type: "text", list: "insuranceProvider", required: true },
+      ...policyFields,
     ],
   },
-  {
-    title: "Insurance incentive",
-    description: "Commission due from the insurer / broker for this policy.",
-    fields: [
-      { name: "incentiveAmount", label: "Insurance incentive amount", type: "money", required: true },
-      { name: "initiatedDate", label: "Date initiated", type: "date", required: true },
-      { name: "incentiveReceived", label: "Incentive received", type: "checkbox" },
-      { name: "receivedDate", label: "Date received", type: "date", enabledBy: "incentiveReceived" },
-      { name: "notes", label: "Notes", type: "textarea", wide: true },
-    ],
-  },
+  claimSection,
 ];
 
-export function insuranceValues(doc?: InsuranceDoc): Record<string, string> {
-  return {
-    chassisNumber: doc?.chassisNumber ?? "",
-    provider: doc?.provider ?? "",
-    policyNumber: doc?.policyNumber ?? "",
-    policyType: doc?.policyType ?? "new",
-    premiumAmount: paiseToInput(doc?.premiumAmount),
-    policyStartDate: dateToInput(doc?.policyStartDate),
-    policyEndDate: dateToInput(doc?.policyEndDate),
-    incentiveAmount: paiseToInput(doc?.incentiveAmount),
-    initiatedDate: dateToInput(doc?.initiatedDate),
-    incentiveReceived: doc?.incentiveReceived ? "on" : "",
-    receivedDate: dateToInput(doc?.receivedDate),
-    notes: doc?.notes ?? "",
-  };
-}
-
-export const incentiveSections: SectionDef[] = [
-  {
-    title: "Incentive payout",
-    description: "Money paid out by the dealership against a chassis.",
-    fields: [
-      chassis,
-      { name: "amount", label: "Incentive amount", type: "money", required: true },
-      { name: "paidTo", label: "Paid to", type: "text", required: true, hint: "Person or firm name" },
-      {
-        name: "payeeType",
-        label: "Payee type",
-        type: "select",
-        required: true,
-        options: PAYEE_TYPES.map((t) => ({ value: t, label: PAYEE_TYPE_LABELS[t] })),
-      },
-      { name: "paidDate", label: "Paid date", type: "date", required: true },
-      { name: "reference", label: "Payment reference", type: "text", hint: "UTR / cheque no.", maxLength: 80 },
-      { name: "notes", label: "Notes", type: "textarea", wide: true },
-    ],
-  },
-];
-
-export function incentiveValues(doc?: IncentiveDoc): Record<string, string> {
-  return {
-    chassisNumber: doc?.chassisNumber ?? "",
-    amount: paiseToInput(doc?.amount),
-    paidTo: doc?.paidTo ?? "",
-    payeeType: doc?.payeeType ?? "sales_executive",
-    paidDate: dateToInput(doc?.paidDate),
-    reference: doc?.reference ?? "",
-    notes: doc?.notes ?? "",
-  };
-}
-
+/** The provider is not entered: it is the insurer the car is insured with (shown read-only). */
 export const renewalSections: SectionDef[] = [
   {
-    title: "Renewal follow-up",
+    title: "Renewed policy",
+    description: "Only cars insured with us can be renewed here. The insurance provider is picked up from the car's insurance.",
     fields: [
       chassis,
-      { name: "dueDate", label: "Renewal due date", type: "date", required: true, hint: "Usually the current policy's end date" },
-      {
-        name: "status",
-        label: "Status",
-        type: "select",
-        required: true,
-        options: RENEWAL_STATUSES.map((s) => ({ value: s, label: RENEWAL_STATUS_LABELS[s] })),
-      },
-      { name: "followUpDate", label: "Next follow-up date", type: "date" },
-      { name: "notes", label: "Notes", type: "textarea", wide: true, hint: "Customer response, quote given, reason lost…" },
+      { name: "provider", label: "Insurance provider", type: "text", hint: "Picked up from the car's insurance with us" },
+      ...policyFields,
     ],
   },
+  claimSection,
 ];
 
-export function renewalValues(doc?: RenewalDoc, prefill?: { chassisNumber?: string; dueDate?: string }): Record<string, string> {
+export function policyValues(
+  doc?: InsuranceDoc | RenewalDoc | null,
+  prefill?: { dealRef?: string; chassisNumber?: string; provider?: string; policyStartDate?: string },
+): Record<string, string> {
   return {
+    dealRef: (doc && "dealRef" in doc ? doc.dealRef : undefined) ?? prefill?.dealRef ?? "",
     chassisNumber: doc?.chassisNumber ?? prefill?.chassisNumber ?? "",
-    dueDate: dateToInput(doc?.dueDate) || (prefill?.dueDate ?? ""),
-    status: doc?.status ?? "due",
-    followUpDate: dateToInput(doc?.followUpDate),
-    notes: doc?.notes ?? "",
+    provider: doc?.provider ?? prefill?.provider ?? "",
+    policyNumber: doc?.policyNumber ?? "",
+    odPremium: paiseToInput(doc?.odPremium),
+    policyStartDate: dateToInput(doc?.policyStartDate) || (prefill?.policyStartDate ?? ""),
+    policyEndDate: dateToInput(doc?.policyEndDate),
+    ...claimValues(doc),
   };
 }

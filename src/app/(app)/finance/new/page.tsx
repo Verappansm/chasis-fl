@@ -1,33 +1,49 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requirePermission } from "@/lib/auth/dal";
+import { findDeal } from "@/lib/repo/modules";
+import { getSettings } from "@/lib/repo/settings";
+import { getOptionLists } from "@/lib/repo/options";
 import { RecordForm } from "@/components/record-form";
-import { PageHeader, TableSkeleton } from "@/components/ui";
+import { DealCard, DealPicker } from "@/components/claims";
+import { PageHeader, TableSkeleton, one } from "@/components/ui";
 import { financeSections, financeValues } from "@/lib/forms";
 import { saveFinance } from "../actions";
 
-export const metadata: Metadata = { title: "New finance case" };
+export const metadata: Metadata = { title: "New finance payout" };
 
-export default function NewFinancePage() {
+export default function NewFinancePage({ searchParams }: PageProps<"/finance/new">) {
   return (
     <>
-      <PageHeader title="New finance case" description="One finance case per chassis." />
+      <PageHeader title="New finance payout" description="One finance payout per sale." />
       <Suspense fallback={<TableSkeleton />}>
-        <Form />
+        <Form searchParams={searchParams} />
       </Suspense>
     </>
   );
 }
 
-async function Form() {
-  await requirePermission("finance:edit");
+async function Form({ searchParams }: { searchParams: PageProps<"/finance/new">["searchParams"] }) {
+  await requirePermission("finance:invoice");
+  const ref = one((await searchParams).deal)?.slice(0, 40);
+  if (!ref) return <DealPicker basePath="/finance/new" />;
+  const deal = await findDeal(ref);
+  if (!deal) return <DealPicker basePath="/finance/new" value={ref} error="No purchase or pre-owned car with this number." />;
+  if (!deal.sold) return <DealPicker basePath="/finance/new" value={ref} error="This car has not been sold yet. Record the sale first." />;
+  const [rates, lists] = await Promise.all([getSettings(), getOptionLists()]);
   return (
-    <RecordForm
-      action={saveFinance}
-      sections={financeSections}
-      initial={financeValues()}
-      cancelHref="/finance"
-      submitLabel="Create finance case"
-    />
+    <>
+      <DealCard deal={deal} />
+      <RecordForm
+        action={saveFinance}
+        sections={financeSections}
+        initial={financeValues(null, deal.ref)}
+        readOnlyFields={["dealRef"]}
+        cancelHref="/finance"
+        submitLabel="Create finance payout"
+        context={rates}
+        lists={lists}
+      />
+    </>
   );
 }
