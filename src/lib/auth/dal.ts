@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { ObjectId } from "mongodb";
 import { collections } from "@/lib/db/collections";
 import { can, effectivePermissions, type Permission, type Principal } from "@/lib/permissions";
+import { writeAudit } from "@/lib/repo/base";
 import { SESSION_COOKIE, verifySession } from "./token";
 
 export interface CurrentUser extends Principal {
@@ -51,17 +52,32 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
+// One log entry per user and missing right per minute (reloads and prefetches repeat).
+const recentDenials = new Map<string, number>();
+
+/** Logs the attempt and shows the "no access" page, naming what was missing. */
+async function deny(user: CurrentUser, need: Permission | "admin"): Promise<never> {
+  const key = `${user.id}|${need}`;
+  const now = Date.now();
+  if ((recentDenials.get(key) ?? 0) < now - 60_000) {
+    recentDenials.set(key, now);
+    if (recentDenials.size > 1000) recentDenials.clear();
+    await writeAudit({ user, action: "denied", entity: "access", detail: need });
+  }
+  redirect(`/no-access?need=${encodeURIComponent(need)}`);
+}
+
 /** Page guard: signed in and holding `permission`, else the "no access" page. */
 export async function requirePermission(permission: Permission): Promise<CurrentUser> {
   const user = await requireUser();
-  if (!can(user, permission)) redirect("/no-access");
+  if (!can(user, permission)) await deny(user, permission);
   return user;
 }
 
-/** Page guard for user management. */
+/** Page guard for user management and constants. */
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireUser();
-  if (user.role !== "admin") redirect("/no-access");
+  if (user.role !== "admin") await deny(user, "admin");
   return user;
 }
 

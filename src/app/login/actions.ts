@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { collections } from "@/lib/db/collections";
 import { createSession, deleteSession } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/dal";
 import { verifyPassword } from "@/lib/auth/password";
 import { LIMITS, clearFailures, isLockedOut, recordFailure } from "@/lib/auth/rate-limit";
 import { loginSchema } from "@/lib/validation/schemas";
@@ -41,13 +42,20 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
       users.findOne({ username }),
     ]);
     if (lockedIp || lockedUser) {
+      await writeAudit({ user: null, username, action: "login_failed", entity: "auth", detail: "locked out (too many attempts)" });
       return { message: "Too many failed attempts. Try again in 15 minutes.", values: { username } };
     }
 
     const ok = await verifyPassword(password, user?.active ? user.passwordHash : undefined);
 
     if (!ok || !user) {
-      await Promise.all([recordFailure(userIpKey), recordFailure(userKey)]);
+      // The reason is for the admin's activity log only; the user sees the generic message.
+      const detail = !user ? "unknown username" : !user.active ? "account deactivated" : "wrong password";
+      await Promise.all([
+        recordFailure(userIpKey),
+        recordFailure(userKey),
+        writeAudit({ user: null, username, action: "login_failed", entity: "auth", detail }),
+      ]);
       return { message: GENERIC_ERROR, values: { username } };
     }
 
@@ -74,6 +82,8 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
 }
 
 export async function logout() {
+  const user = await getCurrentUser();
+  if (user) await writeAudit({ user, action: "logout", entity: "auth" });
   await deleteSession();
   redirect("/login");
 }
