@@ -118,7 +118,7 @@ export function DealPayouts({
           </p>
         </div>
         {sold && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {canAddFinance && !payouts.finance.length && (
               <LinkButton variant="secondary" href={`/finance/new?deal=${ref}`}>
                 Add finance payout
@@ -136,6 +136,7 @@ export function DealPayouts({
         <p className="px-4 py-6 text-center text-sm text-slate-500">None yet.</p>
       ) : (
         <DataTable
+          stack="md"
           head={
             <>
               <Th>Payout</Th>
@@ -147,14 +148,14 @@ export function DealPayouts({
         >
           {rows.map(({ p, kind, href }) => (
             <tr key={p._id.toHexString()}>
-              <Td>
+              <Td primary>
                 <Link href={href} className="font-medium text-indigo-700 hover:underline">
                   {kind}
                 </Link>
               </Td>
-              <Td>{p.provider}</Td>
-              <Td right>{formatMoney(p.claimTotal)}</Td>
-              <Td>
+              <Td label="Provider">{p.provider}</Td>
+              <Td label="Total" right>{formatMoney(p.claimTotal)}</Td>
+              <Td label="Status">
                 <StageBadge claim={p} />
               </Td>
             </tr>
@@ -166,7 +167,17 @@ export function DealPayouts({
 }
 
 /** First step of a new payout: pick the sale by commission no / stock no (GET, no JavaScript needed). */
-export function DealPicker({ basePath, value, error }: { basePath: string; value?: string; error?: string }) {
+export function DealPicker({
+  basePath,
+  value,
+  error,
+  errorLink,
+}: {
+  basePath: string;
+  value?: string;
+  error?: string;
+  errorLink?: { href: string; label: string };
+}) {
   return (
     <Card className="p-6">
       <form action={basePath} method="get" className="max-w-md space-y-3">
@@ -188,7 +199,21 @@ export function DealPicker({ basePath, value, error }: { basePath: string; value
             Continue
           </button>
         </div>
-        {error ? <p className="text-xs text-red-600">{error}</p> : <p className="text-xs text-slate-500">The car must be sold first.</p>}
+        {error ? (
+          <p className="text-xs text-red-600">
+            {error}
+            {errorLink && (
+              <>
+                {" "}
+                <Link href={errorLink.href} className="font-medium underline">
+                  {errorLink.label}
+                </Link>
+              </>
+            )}
+          </p>
+        ) : (
+          <p className="text-xs text-slate-500">The car must be sold first.</p>
+        )}
       </form>
     </Card>
   );

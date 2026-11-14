@@ -5,42 +5,52 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { MODULES, ROLE_LABELS, can } from "@/lib/permissions";
 import { logout } from "@/app/login/actions";
 import { TourConfig, TourLauncher, TourProvider } from "@/components/tour";
+import { NavShell } from "@/components/nav-shell";
 import { tourStepsFor } from "@/lib/tour-steps";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <TourProvider>
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="flex shrink-0 flex-col bg-slate-900 lg:sticky lg:top-0 lg:h-screen lg:w-60">
-          <div className="flex items-center gap-2.5 px-6 py-5">
-            <div className="grid size-8 place-items-center rounded-lg bg-indigo-500 text-sm font-bold text-white">C</div>
-            <div>
-              <p className="text-sm font-semibold text-white">Chasis ERP</p>
-              <p className="text-xs text-slate-400">VST Titanium Motors</p>
+        <aside className="sticky top-0 z-30 flex shrink-0 flex-col bg-[#0b0f17] lg:h-screen lg:w-60">
+          <NavShell brand={<Brand />}>
+            <div className="min-h-0 flex-1 overflow-y-auto py-2 lg:py-0">
+              <Suspense fallback={<NavSkeleton />}>
+                <SideNav />
+              </Suspense>
             </div>
-          </div>
-          <div className="pb-3 lg:flex-1">
-            <Suspense fallback={<NavSkeleton />}>
-              <SideNav />
-            </Suspense>
-          </div>
-          <div className="hidden px-3 pb-2 lg:block">
-            <TourLauncher />
-          </div>
-          <div className="border-t border-white/10 px-4 py-3 lg:p-4">
-            <Suspense fallback={<div className="h-9" />}>
-              <UserBox />
-            </Suspense>
-          </div>
+            <div className="px-3 pb-2 pt-2">
+              <TourLauncher />
+            </div>
+            <div className="border-t border-white/[0.07] px-4 py-3 lg:p-4">
+              <Suspense fallback={<div className="h-9" />}>
+                <UserBox />
+              </Suspense>
+            </div>
+          </NavShell>
         </aside>
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:py-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+          <div className="mx-auto max-w-[1400px]">{children}</div>
         </main>
       </div>
       <Suspense fallback={null}>
         <TourBoot />
       </Suspense>
     </TourProvider>
+  );
+}
+
+function Brand() {
+  return (
+    <Link href="/overview" className="flex min-w-0 items-center gap-3 rounded-md">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-b from-white to-slate-300 text-[13px] font-semibold tracking-tight text-slate-900 shadow-sm">
+        VT
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block truncate text-sm font-semibold tracking-tight text-white">Chasis ERP</span>
+        <span className="block truncate text-[11px] text-slate-400">VST Titanium Motors</span>
+      </span>
+    </Link>
   );
 }
 
@@ -82,9 +92,6 @@ async function UserBox() {
         <p className="text-xs text-slate-400">{ROLE_LABELS[user.role]} · My account</p>
       </Link>
       <div className="flex items-center gap-1">
-        <div className="lg:hidden">
-          <TourLauncher />
-        </div>
         <form action={logout}>
           <button
             type="submit"

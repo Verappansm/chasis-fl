@@ -7,11 +7,11 @@ import { periodFilter, type Period } from "@/lib/periods";
 import { listRecords, searchFilter } from "./base";
 import { todayUtc } from "./modules";
 
-/** Demo stock status: still locked in, deflected and sellable, or sold. */
+/** Demo stock status: still locked in, defleeted and sellable, or sold. */
 export const DEMO_STATUSES = [
   { value: "all", label: "All" },
   { value: "live", label: "Live (lock-in)" },
-  { value: "deflected", label: "Deflected" },
+  { value: "deflected", label: "Defleeted" },
   { value: "sold", label: "Sold" },
 ] as const;
 export type DemoStatus = (typeof DEMO_STATUSES)[number]["value"];
@@ -20,7 +20,7 @@ export function parseDemoStatus(raw: string | undefined): DemoStatus {
   return DEMO_STATUSES.some((s) => s.value === raw) ? (raw as DemoStatus) : "all";
 }
 
-/** Deflected but unsold for longer than this is flagged. */
+/** Defleeted but unsold for longer than this is flagged. */
 export const DEMO_AGEING_DAYS = 60;
 
 function statusFilter(status: DemoStatus, today: Date): Document {
@@ -36,7 +36,7 @@ function statusFilter(status: DemoStatus, today: Date): Document {
   }
 }
 
-export async function listDemo(opts: { q?: string; status: DemoStatus; period: Period; page: number }) {
+export async function listDemo(opts: { q?: string; status: DemoStatus; period: Period; page: number; size?: number }) {
   const { purchases } = await collections();
   const today = todayUtc();
   // Sold cars are filtered by sale date, stock by purchase date.
@@ -48,7 +48,7 @@ export async function listDemo(opts: { q?: string; status: DemoStatus; period: P
     ...periodFilter(dateField, opts.period),
   } as Filter<PurchaseDoc>;
   const sort: Sort = opts.status === "sold" ? { saleDate: -1, _id: -1 } : { purchaseDate: -1, _id: -1 };
-  return listRecords(purchases, filter, sort, opts.page);
+  return listRecords(purchases, filter, sort, opts.page, opts.size);
 }
 
 export interface DemoStats {

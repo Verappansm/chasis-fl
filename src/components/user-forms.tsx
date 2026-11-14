@@ -157,15 +157,15 @@ function PermissionMatrix({
             type="button"
             disabled={disabled}
             onClick={() => onChange(p.permissions)}
-            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+            className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50"
           >
             {p.label}
           </button>
         ))}
       </div>
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="rounded-lg border border-slate-200">
+        <table className="rt rt-md w-full text-sm">
+          <thead className="bg-slate-50/70 text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-2.5 text-left">Area</th>
               {COLUMNS.map((c) => (
@@ -178,14 +178,14 @@ function PermissionMatrix({
           <tbody className="divide-y divide-slate-100">
             {ROWS.map((row) => (
               <tr key={row.key}>
-                <td className="px-4 py-2.5 font-medium text-slate-800">{row.label}</td>
+                <td data-primary="" className="px-4 py-2.5 font-medium text-slate-800">{row.label}</td>
                 {COLUMNS.map((c) => {
                   const action = row.cells[c.key];
-                  if (!action) return <td key={c.key} />;
+                  if (!action) return <td key={c.key} className="max-md:hidden" />;
                   const perm = `${row.key}:${action}` as Permission;
                   const label = action === "edit" ? "Create & edit" : c.label;
                   return (
-                    <td key={c.key} className="px-4 py-2.5 text-center">
+                    <td key={c.key} data-label={label} className="px-4 py-2.5 text-center">
                       <input
                         type="checkbox"
                         name="permissions"

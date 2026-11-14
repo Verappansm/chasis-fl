@@ -1,4 +1,5 @@
 import "server-only";
+import { ALL_ROWS_LIMIT, DEFAULT_PAGE_SIZE } from "@/lib/paging";
 import { ObjectId, type Collection, type Document, type Filter, type Sort } from "mongodb";
 import { headers } from "next/headers";
 import { collections } from "@/lib/db/collections";
@@ -12,7 +13,6 @@ export type BaseDoc = AuditFields & { _id: ObjectId; chassisNumber: string };
 /** The business fields of a document — what a validated form produces. */
 export type Payload<T extends BaseDoc> = Omit<T, "_id" | keyof AuditFields>;
 
-export const PAGE_SIZE = 25;
 
 export function toObjectId(id: string): ObjectId {
   if (!ObjectId.isValid(id) || String(new ObjectId(id)) !== id) throw new NotFoundError("Record not found");
@@ -222,14 +222,16 @@ export async function listRecords<T extends BaseDoc>(
   filter: Filter<T>,
   sort: Sort,
   page: number,
+  size: number = DEFAULT_PAGE_SIZE,
 ): Promise<Page<T>> {
   const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+  const perPage = Number.isInteger(size) && size > 0 ? Math.min(size, ALL_ROWS_LIMIT) : DEFAULT_PAGE_SIZE;
   const [items, total] = await Promise.all([
     col
       .find(filter)
       .sort(sort)
-      .skip((safePage - 1) * PAGE_SIZE)
-      .limit(PAGE_SIZE)
+      .skip((safePage - 1) * perPage)
+      .limit(perPage)
       .toArray(),
     col.countDocuments(filter),
   ]);
@@ -237,7 +239,7 @@ export async function listRecords<T extends BaseDoc>(
     items: items as T[],
     total,
     page: safePage,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    pageCount: Math.max(1, Math.ceil(total / perPage)),
   };
 }
 

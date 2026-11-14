@@ -33,8 +33,8 @@ function PeriodPills({ period }: { period: Period }) {
           key={p.value}
           href={p.value === "month" ? "/overview" : `/overview?period=${p.value}`}
           aria-current={p.value === period ? "page" : undefined}
-          className={`rounded-full px-3 py-1 text-xs font-medium ${
-            p.value === period ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+            p.value === period ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
           }`}
         >
           {p.label}
@@ -275,7 +275,7 @@ async function Overview({ searchParams }: { searchParams: PageProps<"/overview">
           <Tile
             label="Demo cars in lock-in"
             value={String(s.stock.locked)}
-            detail={`${s.stock.deflected} deflected and ready to sell`}
+            detail={`${s.stock.deflected} defleeted and ready to sell`}
             href={canPurchases ? "/demo" : undefined}
           />
           <Tile

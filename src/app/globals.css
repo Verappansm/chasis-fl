@@ -5,21 +5,113 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/*
+ * Brand accent. The app's `indigo-*` utilities are remapped to a restrained
+ * steel navy, so every accent (links, focus rings, active states) shares one
+ * sober colour instead of the stock indigo.
+ */
+@theme {
+  --color-indigo-50: #f3f6fa;
+  --color-indigo-100: #e4eaf3;
+  --color-indigo-200: #c9d5e6;
+  --color-indigo-300: #a1b5d2;
+  --color-indigo-400: #7090b9;
+  --color-indigo-500: #4d71a0;
+  --color-indigo-600: #375a87;
+  --color-indigo-700: #2c4870;
+  --color-indigo-800: #243a5a;
+  --color-indigo-900: #1c2d46;
+  --color-indigo-950: #121d2f;
+}
+
 /* Internal business tool: a single, high-contrast light theme. */
 :root {
   color-scheme: light;
 }
 
+body {
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Nothing in the app scrolls sideways. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/*
+ * Responsive data tables (.rt + .rt-md / .rt-lg / .rt-xl).
+ * At or above the breakpoint: a normal table whose cells wrap instead of
+ * overflowing. Below it: each row becomes a card, every cell labelled from its
+ * data-label. Unlayered, so these win over Tailwind's utilities.
+ */
+.rt td,
+.rt th {
+  overflow-wrap: anywhere;
+}
+/* Amounts never break in the middle of a number. */
+.rt td.text-right {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  .rt-md thead { display: none; }
+  .rt-md, .rt-md tbody { display: block; width: 100%; }
+  .rt-md tbody > tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem; padding: 1rem; }
+  .rt-md tbody > tr > td { display: block; padding: 0; text-align: left; }
+  .rt-md tbody > tr > td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 0.125rem;
+    font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-slate-500);
+  }
+  .rt-md tbody > tr > td[data-primary], .rt-md tbody > tr > td[data-wide] { grid-column: 1 / -1; }
+  .rt-md tbody > tr > td[data-primary]::before { display: none; }
+}
+
+@media (max-width: 1023.98px) {
+  .rt-lg thead { display: none; }
+  .rt-lg, .rt-lg tbody { display: block; width: 100%; }
+  .rt-lg tbody > tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem; padding: 1rem; }
+  .rt-lg tbody > tr > td { display: block; padding: 0; text-align: left; }
+  .rt-lg tbody > tr > td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 0.125rem;
+    font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-slate-500);
+  }
+  .rt-lg tbody > tr > td[data-primary], .rt-lg tbody > tr > td[data-wide] { grid-column: 1 / -1; }
+  .rt-lg tbody > tr > td[data-primary]::before { display: none; }
+}
+
+@media (max-width: 1279.98px) {
+  .rt-xl thead { display: none; }
+  .rt-xl, .rt-xl tbody { display: block; width: 100%; }
+  .rt-xl tbody > tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem; padding: 1rem; }
+  .rt-xl tbody > tr > td { display: block; padding: 0; text-align: left; }
+  .rt-xl tbody > tr > td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 0.125rem;
+    font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-slate-500);
+  }
+  .rt-xl tbody > tr > td[data-primary], .rt-xl tbody > tr > td[data-wide] { grid-column: 1 / -1; }
+  .rt-xl tbody > tr > td[data-primary]::before { display: none; }
+}
+
+/* Cards get a third column once there is room for it. */
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .rt-lg tbody > tr, .rt-xl tbody > tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .rt-xl tbody > tr { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 /* Guided tour spotlight: a bright outline plus a dimmed page; click-to-continue steps pulse. */
 .tour-spot {
-  box-shadow: 0 0 0 3px #818cf8, 0 0 0 9999px rgb(2 6 23 / 0.6);
+  box-shadow: 0 0 0 3px #7090b9, 0 0 0 9999px rgb(2 6 23 / 0.6);
 }
 .tour-spot-pulse {
   animation: tour-pulse 1.6s ease-in-out infinite;
 }
 @keyframes tour-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px #818cf8, 0 0 0 3px rgb(129 140 248 / 0.6), 0 0 0 9999px rgb(2 6 23 / 0.6); }
-  50% { box-shadow: 0 0 0 3px #a5b4fc, 0 0 0 12px rgb(129 140 248 / 0), 0 0 0 9999px rgb(2 6 23 / 0.6); }
+  0%, 100% { box-shadow: 0 0 0 3px #7090b9, 0 0 0 3px rgb(112 144 185 / 0.6), 0 0 0 9999px rgb(2 6 23 / 0.6); }
+  50% { box-shadow: 0 0 0 3px #a1b5d2, 0 0 0 12px rgb(112 144 185 / 0), 0 0 0 9999px rgb(2 6 23 / 0.6); }
 }
 @media (prefers-reduced-motion: reduce) {
   .tour-spot-pulse { animation: none; }

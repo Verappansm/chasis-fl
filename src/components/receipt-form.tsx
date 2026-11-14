@@ -99,9 +99,9 @@ export function ReceiptForm({
       </div>
 
       {receipts.length > 0 && (
-        <div className="overflow-x-auto border-b border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="border-b border-slate-200">
+          <table className="rt rt-md w-full text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
               <tr>
                 <th className="px-4 py-2.5">Receipt no</th>
                 <th className="px-4 py-2.5">Date</th>
@@ -114,13 +114,13 @@ export function ReceiptForm({
             <tbody className="divide-y divide-slate-100">
               {receipts.map((r) => (
                 <tr key={r.id}>
-                  <td className="px-4 py-2.5 font-mono text-[13px]">{r.receiptNo}</td>
-                  <td className="px-4 py-2.5">{formatDay(r.receiptDate)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(r.tdsAmount)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(r.receivedAmount)}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{r.by || "—"}</td>
+                  <td data-primary="" className="px-4 py-2.5 font-mono text-[13px] font-medium text-slate-900">{r.receiptNo}</td>
+                  <td data-label="Date" className="px-4 py-2.5">{formatDay(r.receiptDate)}</td>
+                  <td data-label="TDS" className="px-4 py-2.5 text-right tabular-nums">{formatMoney(r.tdsAmount)}</td>
+                  <td data-label="Received" className="px-4 py-2.5 text-right tabular-nums">{formatMoney(r.receivedAmount)}</td>
+                  <td data-label="By" className="px-4 py-2.5 text-slate-500">{r.by || "—"}</td>
                   {canEdit && (
-                    <td className="px-4 py-2.5 text-right">
+                    <td data-wide="" className="px-4 py-2.5 text-right">
                       <form
                         action={removeFormAction}
                         onSubmit={(ev) => {
@@ -176,6 +176,7 @@ export function ReceiptForm({
                 name="receiptDate"
                 type="date"
                 min="2000-01-01"
+                max={new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())}
                 defaultValue={values.receiptDate}
                 aria-invalid={e("receiptDate") ? true : undefined}
                 className={inputClass}

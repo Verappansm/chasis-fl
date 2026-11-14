@@ -26,7 +26,7 @@ export function ErrorPanel({ error, retry }: { error: unknown; retry: () => void
         <button
           type="button"
           onClick={() => retry()}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           Try again
         </button>

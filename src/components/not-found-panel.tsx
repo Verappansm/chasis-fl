@@ -8,7 +8,7 @@ export function NotFoundPanel() {
       <p className="mt-2 text-sm text-slate-600">
         The link may be mistyped, or the record may have been deleted. Deletions are listed in the activity log.
       </p>
-      <Link href="/" className="mt-6 inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+      <Link href="/" className="mt-6 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
         Go to start
       </Link>
     </div>

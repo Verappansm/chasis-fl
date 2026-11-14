@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requirePermission } from "@/lib/auth/dal";
-import { findDeal } from "@/lib/repo/modules";
+import { existingFinanceForCar, findDeal } from "@/lib/repo/modules";
 import { getSettings } from "@/lib/repo/settings";
 import { getOptionLists } from "@/lib/repo/options";
 import { RecordForm } from "@/components/record-form";
@@ -30,6 +30,17 @@ async function Form({ searchParams }: { searchParams: PageProps<"/finance/new">[
   const deal = await findDeal(ref);
   if (!deal) return <DealPicker basePath="/finance/new" value={ref} error="No purchase or pre-owned car with this number." />;
   if (!deal.sold) return <DealPicker basePath="/finance/new" value={ref} error="This car has not been sold yet. Record the sale first." />;
+  const dup = await existingFinanceForCar(deal.chassisNumber);
+  if (dup) {
+    return (
+      <DealPicker
+        basePath="/finance/new"
+        value={ref}
+        error={`This car (chassis ${deal.chassisNumber}) already has a finance payout under ${dup.dealRef}${dup.provider ? ` with ${dup.provider}` : ""}. A car can only have one.`}
+        errorLink={{ href: `/finance/${dup._id.toHexString()}`, label: "Open it" }}
+      />
+    );
+  }
   const [rates, lists] = await Promise.all([getSettings(), getOptionLists()]);
   return (
     <>

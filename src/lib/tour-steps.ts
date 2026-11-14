@@ -88,7 +88,7 @@ const STEPS: TourStep[] = [
     clickToContinue: true,
     requires: "purchases:view",
     title: "Demo stock",
-    body: "Click Demo stock: only the demo cars, split into live (in lock-in), deflected and sold.",
+    body: "Click Demo stock: only the demo cars, split into live (in lock-in), defleeted and sold.",
   },
   {
     id: "demo-list",
@@ -96,7 +96,7 @@ const STEPS: TourStep[] = [
     target: "demo-list",
     requires: "purchases:view",
     title: "Profit or loss on every demo car",
-    body: "A is total selling price minus total purchase, B the loss claim with Mercedes-Benz, C the sales measure; net = A + B + C. The cards above show stock, unsold value and the P&L for the period.",
+    body: "Each sold car shows total SP − total purchase, the loss claim with Mercedes-Benz and the sales measure; net profit / loss adds the three. Switch between including GST and before GST. The cards above show stock, unsold value and the P&L for the period.",
   },
   {
     id: "nav-preowned",

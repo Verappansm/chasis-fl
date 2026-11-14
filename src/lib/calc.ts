@@ -124,7 +124,8 @@ function rupeesToPaise(raw: string | undefined): Paise {
 }
 
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2, minimumFractionDigits: 0 });
-const show = (paise: Paise) => inr.format(paise / 100);
+const inrPaise = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const show = (paise: Paise) => (paise % 100 === 0 ? inr : inrPaise).format(paise / 100);
 const showPct = (bp: BasisPoints) => `${(bp / 100).toFixed(2)}%`;
 
 export type FormulaContext = Rates;

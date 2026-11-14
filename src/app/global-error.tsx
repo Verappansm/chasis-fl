@@ -17,7 +17,7 @@ export default function GlobalError({ error, retry }: { error: unknown; retry: (
           </p>
           {digest && <p className="mt-3 font-mono text-xs text-slate-400">Reference: {digest}</p>}
           <div className="mt-6 flex justify-center gap-3">
-            <button onClick={() => retry()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+            <button onClick={() => retry()} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
               Try again
             </button>
             <Link href="/" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">

@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { IfCan } from "@/components/if-can";
 import { listPreowned, type PreownedFilter } from "@/lib/repo/modules";
 import { parsePeriod } from "@/lib/periods";
+import { parsePageSize } from "@/lib/paging";
 import { dateToInput, formatMoney } from "@/lib/format";
 import { PREOWNED_USE_LABELS } from "@/lib/types";
 import { DateText } from "@/components/date-text";
@@ -20,10 +21,12 @@ import {
   ListToolbar,
   PageHeader,
   Pagination,
+  Sub,
   TableSkeleton,
   Td,
   Th,
   one,
+  rowClass,
 } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Pre-owned" };
@@ -62,7 +65,8 @@ async function PreownedList({ searchParams }: { searchParams: PageProps<"/preown
   const status: PreownedFilter = raw === "in_stock" || raw === "sold" ? raw : "all";
   const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
-  const result = await listPreowned({ q, status, period, page });
+  const size = parsePageSize(one(sp.size));
+  const result = await listPreowned({ size: size.size, q, status, period, page });
 
   return (
     <>
@@ -71,6 +75,7 @@ async function PreownedList({ searchParams }: { searchParams: PageProps<"/preown
         <ListToolbar
           basePath="/preowned"
           q={q}
+          pageSize={size.value}
           placeholder="Search stock no, chassis, registration, model, name"
           filters={[
             { param: "status", label: "Status", value: status, options: STATUS_OPTIONS },
@@ -81,12 +86,11 @@ async function PreownedList({ searchParams }: { searchParams: PageProps<"/preown
           <EmptyState title="No pre-owned cars found" />
         ) : (
           <DataTable
+            stack="xl"
             head={
               <>
                 <Th>Stock no</Th>
-                <Th>Chassis</Th>
                 <Th>Car</Th>
-                <Th>Use</Th>
                 <Th>Bought</Th>
                 <Th right>Purchase</Th>
                 <Th>Sold</Th>
@@ -98,26 +102,28 @@ async function PreownedList({ searchParams }: { searchParams: PageProps<"/preown
             {result.items.map((doc) => {
               const margin = doc.salePrice !== undefined ? doc.salePrice - doc.purchasePrice : undefined;
               return (
-                <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                  <Td mono>
-                    <Link href={`/preowned/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
+                <tr key={doc._id.toHexString()} className={rowClass}>
+                  <Td primary>
+                    <Link href={`/preowned/${doc._id.toHexString()}`} className="font-mono text-[13px] font-medium text-indigo-700 hover:underline">
                       {doc.stockNo}
                     </Link>
+                    <Sub mono>{doc.chassisNumber}</Sub>
                   </Td>
-                  <Td mono>{doc.chassisNumber}</Td>
-                  <Td>
+                  <Td label="Car">
                     {doc.make} {doc.model}
-                    {doc.registrationNo && <span className="block font-mono text-xs text-slate-400">{doc.registrationNo}</span>}
+                    <Sub>
+                      {PREOWNED_USE_LABELS[doc.intendedUse]}
+                      {doc.registrationNo && <span className="font-mono"> · {doc.registrationNo}</span>}
+                    </Sub>
                   </Td>
-                  <Td>{PREOWNED_USE_LABELS[doc.intendedUse]}</Td>
-                  <Td>
+                  <Td label="Bought">
                     <DateText iso={dateToInput(doc.purchaseDate)} />
                   </Td>
-                  <Td right>{formatMoney(doc.purchasePrice)}</Td>
-                  <Td>{doc.saleDate ? <DateText iso={dateToInput(doc.saleDate)} /> : <Badge tone="slate">In stock</Badge>}</Td>
-                  <Td right>{formatMoney(doc.salePrice)}</Td>
-                  <Td right>
-                    {margin === undefined ? "—" : <span className={margin < 0 ? "text-red-600" : "text-emerald-700"}>{formatMoney(margin)}</span>}
+                  <Td label="Purchase" right>{formatMoney(doc.purchasePrice)}</Td>
+                  <Td label="Sold">{doc.saleDate ? <DateText iso={dateToInput(doc.saleDate)} /> : <Badge tone="slate">In stock</Badge>}</Td>
+                  <Td label="Sale" right>{formatMoney(doc.salePrice)}</Td>
+                  <Td label="Margin" right>
+                    {margin === undefined ? "—" : <span className={margin < 0 ? "text-red-700" : "text-emerald-700"}>{formatMoney(margin)}</span>}
                   </Td>
                 </tr>
               );
@@ -129,7 +135,7 @@ async function PreownedList({ searchParams }: { searchParams: PageProps<"/preown
           page={result.page}
           pageCount={result.pageCount}
           total={result.total}
-          params={{ q, status: status === "all" ? undefined : status, period: period === "all" ? undefined : period }}
+          params={{ size: size.value === "50" ? undefined : size.value, q, status: status === "all" ? undefined : status, period: period === "all" ? undefined : period }}
         />
       </Card>
     </>

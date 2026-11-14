@@ -20,9 +20,12 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 });
 
+const inrPaise = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Whole rupees without decimals, otherwise always two (₹1,93,25,048.80, never .8). */
 export function formatMoney(paise: number | undefined | null): string {
   if (paise === undefined || paise === null) return "—";
-  return inr.format(paise / 100);
+  return (paise % 100 === 0 ? inr : inrPaise).format(paise / 100);
 }
 
 export function formatDate(d: Date | undefined | null): string {

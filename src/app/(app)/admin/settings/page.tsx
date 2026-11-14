@@ -142,11 +142,6 @@ async function Form({ searchParams }: { searchParams: PageProps<"/admin/settings
                 version={lists[l.key].version}
                 used={used[l.key]}
                 fixed={l.key === "purchaseType" ? PURCHASE_TYPES.map((t) => PURCHASE_TYPE_LABELS[t]) : []}
-                warning={
-                  l.key === "purchaseType"
-                    ? "Only New earns fixed compensation and only Demo has a lock-in. In text-box mode a mistyped type (e.g. “Nwe”) becomes a separate type with neither rule."
-                    : undefined
-                }
               />
             </div>
           ))}

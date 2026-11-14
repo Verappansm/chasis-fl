@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { IfCan } from "@/components/if-can";
 import { listFinance, parseStage } from "@/lib/repo/modules";
 import { parsePeriod } from "@/lib/periods";
+import { parsePageSize } from "@/lib/paging";
 import { dateToInput, formatMoney } from "@/lib/format";
 import { DateText } from "@/components/date-text";
 import { ClaimRefs, LIST_PERIOD_OPTIONS, STAGE_OPTIONS, StageBadge } from "@/components/claims";
@@ -18,10 +19,12 @@ import {
   ListToolbar,
   PageHeader,
   Pagination,
+  Sub,
   TableSkeleton,
   Td,
   Th,
   one,
+  rowClass,
 } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Finance payout" };
@@ -53,7 +56,8 @@ async function FinanceList({ searchParams }: { searchParams: PageProps<"/finance
   const stage = parseStage(one(sp.stage));
   const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
-  const result = await listFinance({ q, stage, period, page });
+  const size = parsePageSize(one(sp.size));
+  const result = await listFinance({ size: size.size, q, stage, period, page });
 
   return (
     <>
@@ -62,6 +66,7 @@ async function FinanceList({ searchParams }: { searchParams: PageProps<"/finance
         <ListToolbar
           basePath="/finance"
           q={q}
+          pageSize={size.value}
           placeholder="Search chassis, commission, provider, contract, invoice"
           filters={[
             { param: "stage", label: "Stage", value: stage, options: STAGE_OPTIONS },
@@ -72,39 +77,40 @@ async function FinanceList({ searchParams }: { searchParams: PageProps<"/finance
           <EmptyState title="No finance payouts found" />
         ) : (
           <DataTable
+            stack="xl"
             head={
               <>
                 <Th>Commission / stock</Th>
-                <Th>Chassis</Th>
                 <Th>Provider</Th>
-                <Th>Contract no</Th>
                 <Th>Disbursed</Th>
                 <Th right>Loan</Th>
-                <Th right>Total</Th>
+                <Th right>Payout total</Th>
                 <Th>Invoice / receipt</Th>
                 <Th>Stage</Th>
               </>
             }
           >
             {result.items.map((doc) => (
-              <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                <Td mono>
-                  <Link href={`/finance/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
+              <tr key={doc._id.toHexString()} className={rowClass}>
+                <Td primary>
+                  <Link href={`/finance/${doc._id.toHexString()}`} className="font-mono text-[13px] font-medium text-indigo-700 hover:underline">
                     {doc.dealRef}
                   </Link>
+                  <Sub mono>{doc.chassisNumber}</Sub>
                 </Td>
-                <Td mono>{doc.chassisNumber}</Td>
-                <Td>{doc.provider}</Td>
-                <Td mono>{doc.contractNo}</Td>
-                <Td>
+                <Td label="Provider">
+                  {doc.provider}
+                  <Sub mono>{doc.contractNo}</Sub>
+                </Td>
+                <Td label="Disbursed">
                   <DateText iso={dateToInput(doc.disbursalDate)} />
                 </Td>
-                <Td right>{formatMoney(doc.loanAmount)}</Td>
-                <Td right>{formatMoney(doc.claimTotal)}</Td>
-                <Td>
+                <Td label="Loan" right>{formatMoney(doc.loanAmount)}</Td>
+                <Td label="Payout total" right>{formatMoney(doc.claimTotal)}</Td>
+                <Td label="Invoice / receipt">
                   <ClaimRefs claim={doc} />
                 </Td>
-                <Td>
+                <Td label="Stage">
                   <StageBadge claim={doc} />
                 </Td>
               </tr>
@@ -116,7 +122,7 @@ async function FinanceList({ searchParams }: { searchParams: PageProps<"/finance
           page={result.page}
           pageCount={result.pageCount}
           total={result.total}
-          params={{ q, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
+          params={{ size: size.value === "50" ? undefined : size.value, q, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
         />
       </Card>
     </>

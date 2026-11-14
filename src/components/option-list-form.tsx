@@ -28,7 +28,6 @@ export function OptionListForm({
   version,
   fixed = [],
   used = [],
-  warning,
 }: {
   action: Action;
   listKey: string;
@@ -41,7 +40,6 @@ export function OptionListForm({
   fixed?: string[];
   /** Values already in the records, offered as a quick add. */
   used?: string[];
-  warning?: string;
 }) {
   const [state, formAction] = useActionState(action, initialFormState);
   const [current, setCurrent] = useState<OptionMode>((state.values?.mode as OptionMode) ?? mode);
@@ -79,12 +77,11 @@ export function OptionListForm({
           ? "Employees must pick one of these options."
           : "Employees type freely; these options are suggested as they type."}
       </p>
-      {warning && <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">{warning}</p>}
       {fixed.length > 0 && (
         <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
           Always available:
           {fixed.map((f) => (
-            <span key={f} className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+            <span key={f} className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
               {f}
             </span>
           ))}

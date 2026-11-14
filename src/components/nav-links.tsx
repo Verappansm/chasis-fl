@@ -25,7 +25,7 @@ const ICONS: Record<string, string> = {
 export function NavLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto px-3 lg:flex-col lg:overflow-visible" aria-label="Main">
+    <nav className="flex flex-col gap-0.5 px-3" aria-label="Main">
       {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -34,11 +34,12 @@ export function NavLinks({ items }: { items: NavItem[] }) {
             href={item.href}
             data-tour={`nav-${item.href.slice(1).replaceAll("/", "-")}`}
             aria-current={active ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-              active ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5 hover:text-white"
+            className={`group relative flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors ${
+              active ? "bg-white/[0.08] text-white" : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-100"
             }`}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="size-5" aria-hidden>
+            {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-white" aria-hidden />}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={`size-[18px] ${active ? "text-white" : "text-slate-500 group-hover:text-slate-300"}`} aria-hidden>
               <path d={ICONS[item.href]} />
             </svg>
             {item.label}
@@ -51,9 +52,9 @@ export function NavLinks({ items }: { items: NavItem[] }) {
 
 export function NavSkeleton() {
   return (
-    <div className="flex gap-1 px-3 lg:flex-col" aria-hidden>
+    <div className="flex flex-col gap-1 px-3" aria-hidden>
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-9 w-28 shrink-0 animate-pulse rounded-lg bg-white/5 lg:w-auto" />
+        <div key={i} className="h-9 animate-pulse rounded-md bg-white/5" />
       ))}
     </div>
   );

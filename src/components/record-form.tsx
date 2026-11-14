@@ -28,7 +28,14 @@ export type FieldDef = {
   showWhen?: ShowWhen;
   /** Text field whose choices an admin manages (drop-down or free text with suggestions). */
   list?: OptionListKey;
+  /** Date fields: allow dates after today (otherwise the picker stops at today). */
+  allowFuture?: boolean;
 };
+
+/** Today in IST as yyyy-mm-dd, matching the server's date rules. */
+function todayIst(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
 
 /** Case-insensitive, so a typed "Demo" counts as "demo". */
 export type ShowWhen = { field: string; in?: string[]; notIn?: string[] };
@@ -346,6 +353,7 @@ function FieldInput({
           {...common}
           type="date"
           min="2000-01-01"
+          max={field.allowFuture ? undefined : todayIst()}
           defaultValue={disabled ? "" : value}
           required={field.required}
           className={inputClass}
@@ -363,7 +371,7 @@ function FieldInput({
           required={field.required}
           readOnly={readOnly}
           maxLength={field.maxLength ?? 40}
-          className={`${inputClass} font-mono uppercase`}
+          className={`${inputClass} font-mono uppercase placeholder:normal-case`}
         />
       );
       break;
@@ -391,9 +399,18 @@ function FieldInput({
           defaultValue={value}
           required
           readOnly={readOnly}
-          maxLength={24}
-          placeholder="e.g. MA3EWDE1S00123456"
-          className={`${inputClass} font-mono uppercase`}
+          minLength={17}
+          maxLength={17}
+          pattern="[A-Za-z0-9]{17}"
+          title="Exactly 17 letters and digits"
+          placeholder="e.g. WDD2050461F123456"
+          onInput={(e) => {
+            // Letters and digits only, upper case, as the server stores it.
+            const el = e.currentTarget;
+            const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
+            if (clean !== el.value) el.value = clean;
+          }}
+          className={`${inputClass} font-mono uppercase placeholder:normal-case`}
         />
       );
       break;
@@ -418,7 +435,11 @@ function FieldInput({
         {field.required && <span className="ml-0.5 text-red-500">*</span>}
       </label>
       {control}
-      <Messages id={id} error={error} hint={readOnly ? "Cannot be changed after creation." : field.hint} />
+      <Messages
+        id={id}
+        error={error}
+        hint={readOnly ? "Cannot be changed after creation." : field.type === "chassis" ? (field.hint ?? "Exactly 17 letters and digits") : field.hint}
+      />
     </div>
   );
 }

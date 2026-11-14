@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { IfCan } from "@/components/if-can";
 import { listPurchases, parsePurchaseType, parseStage, todayUtc } from "@/lib/repo/modules";
 import { parsePeriod } from "@/lib/periods";
+import { parsePageSize } from "@/lib/paging";
 import { dateToInput, formatMoney } from "@/lib/format";
 import { PURCHASE_TYPES, PURCHASE_TYPE_LABELS, purchaseTypeLabel, type PurchaseDoc } from "@/lib/types";
 import { getOptionLists } from "@/lib/repo/options";
@@ -21,10 +22,12 @@ import {
   ListToolbar,
   PageHeader,
   Pagination,
+  Sub,
   TableSkeleton,
   Td,
   Th,
   one,
+  rowClass,
 } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Purchase" };
@@ -58,7 +61,7 @@ function Status({ doc, today }: { doc: PurchaseDoc; today: Date }) {
     const left = Math.ceil((doc.deflectDate.getTime() - today.getTime()) / 86_400_000);
     return <Badge tone="amber">Locked · {left}d left</Badge>;
   }
-  if (doc.type === "demo") return <Badge tone="indigo">Deflected · can sell</Badge>;
+  if (doc.type === "demo") return <Badge tone="indigo">Defleeted · can sell</Badge>;
   return <Badge tone="slate">In stock</Badge>;
 }
 
@@ -77,7 +80,8 @@ async function PurchaseList({ searchParams }: { searchParams: PageProps<"/purcha
   const stage = parseStage(one(sp.stage));
   const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
-  const result = await listPurchases({ q, type, stage, period, page });
+  const size = parsePageSize(one(sp.size));
+  const result = await listPurchases({ size: size.size, q, type, stage, period, page });
   const today = todayUtc();
 
   return (
@@ -87,6 +91,7 @@ async function PurchaseList({ searchParams }: { searchParams: PageProps<"/purcha
         <ListToolbar
           basePath="/purchases"
           q={q}
+          pageSize={size.value}
           placeholder="Search commission, chassis, customer, model, invoice"
           filters={[
             { param: "type", label: "Type", value: type, options: TYPE_OPTIONS },
@@ -98,12 +103,11 @@ async function PurchaseList({ searchParams }: { searchParams: PageProps<"/purcha
           <EmptyState title="No purchases found">{q ? "Try a different search." : "Record the first purchase."}</EmptyState>
         ) : (
           <DataTable
+            stack="xl"
             head={
               <>
                 <Th>Commission no</Th>
-                <Th>Chassis</Th>
                 <Th>Purchased</Th>
-                <Th>Type</Th>
                 <Th>Model</Th>
                 <Th>Customer</Th>
                 <Th right>Final price</Th>
@@ -113,25 +117,25 @@ async function PurchaseList({ searchParams }: { searchParams: PageProps<"/purcha
             }
           >
             {result.items.map((doc) => (
-              <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                <Td mono>
-                  <Link href={`/purchases/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
+              <tr key={doc._id.toHexString()} className={rowClass}>
+                <Td primary>
+                  <Link href={`/purchases/${doc._id.toHexString()}`} className="font-mono text-[13px] font-medium text-indigo-700 hover:underline">
                     {doc.commissionNo}
                   </Link>
+                  <Sub mono>{doc.chassisNumber}</Sub>
                 </Td>
-                <Td mono>{doc.chassisNumber}</Td>
-                <Td>
+                <Td label="Purchased">
                   <DateText iso={dateToInput(doc.purchaseDate)} />
+                  <Sub>{purchaseTypeLabel(doc.type)}</Sub>
                 </Td>
-                <Td>{purchaseTypeLabel(doc.type)}</Td>
-                <Td>
+                <Td label="Model">
                   {doc.model}
-                  <span className="block text-xs text-slate-400">{doc.carClass}</span>
+                  <Sub>{doc.carClass}</Sub>
                 </Td>
-                <Td>{(doc.type === "new" ? doc.customerName : doc.soldTo) ?? "—"}</Td>
-                <Td right>{formatMoney(doc.finalPrice)}</Td>
-                <Td right>{formatMoney(doc.claimTotal)}</Td>
-                <Td>
+                <Td label="Customer">{(doc.type === "new" ? doc.customerName : doc.soldTo) ?? "—"}</Td>
+                <Td label="Final price" right>{formatMoney(doc.finalPrice)}</Td>
+                <Td label="FC receivable" right>{formatMoney(doc.claimTotal)}</Td>
+                <Td label="Status">
                   <Status doc={doc} today={today} />
                 </Td>
               </tr>
@@ -143,7 +147,7 @@ async function PurchaseList({ searchParams }: { searchParams: PageProps<"/purcha
           page={result.page}
           pageCount={result.pageCount}
           total={result.total}
-          params={{ q, type: type === "all" ? undefined : type, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
+          params={{ size: size.value === "50" ? undefined : size.value, q, type: type === "all" ? undefined : type, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
         />
       </Card>
     </>

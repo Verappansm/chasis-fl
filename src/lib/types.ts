@@ -59,7 +59,7 @@ export interface SettingsDoc {
   insuranceTdsRateBp?: BasisPoints;
   /** Before per-stream TDS: one rate for every payer. Read as the fallback. */
   tdsRateBp?: BasisPoints;
-  /** Days a demo car is locked after purchase before it is deflected and can be sold. */
+  /** Days a demo car is locked after purchase before it is defleeted and can be sold. */
   demoLockInDays: number;
   /** Loan cap as a share of the car value. */
   loanCapBp?: BasisPoints;

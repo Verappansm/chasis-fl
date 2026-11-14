@@ -14,14 +14,18 @@ export function normalizeChassis(raw: string): string {
   return raw.replace(/[\s-]/g, "").toUpperCase();
 }
 
+export const CHASSIS_LENGTH = 17;
+
+/** Exactly 17 letters and digits. Spaces are ignored; any other character is refused rather than silently dropped. */
 export const chassisField = z
   .string({ message: "Chassis number is required" })
-  .transform(normalizeChassis)
+  .transform((v) => v.replace(/\s/g, "").toUpperCase())
   .pipe(
     z
       .string()
       .min(1, "Chassis number is required")
-      .regex(/^[A-Z0-9]{6,20}$/, "Chassis number must be 6–20 letters/digits"),
+      .regex(/^[A-Z0-9]*$/, "Chassis number can only have letters and digits (no symbols)")
+      .length(CHASSIS_LENGTH, `Chassis number must be exactly ${CHASSIS_LENGTH} characters`),
   );
 
 export function requiredText(label: string, max = 120) {

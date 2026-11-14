@@ -44,25 +44,25 @@ async function Account() {
           </div>
         </dl>
         <h2 className="mt-6 text-sm font-semibold text-slate-900">Your access</h2>
-        <div className="mt-2 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200">
+          <table className="rt rt-md w-full text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-2 pr-6">Area</th>
-                <th className="py-2 pr-6">View</th>
-                <th className="py-2 pr-6">Invoice (create &amp; edit)</th>
-                <th className="py-2 pr-6">Receipt</th>
-                <th className="py-2">Delete</th>
+                <th className="px-4 py-2.5">Area</th>
+                <th className="px-4 py-2.5">View</th>
+                <th className="px-4 py-2.5">Invoice (create &amp; edit)</th>
+                <th className="px-4 py-2.5">Receipt</th>
+                <th className="px-4 py-2.5">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {rows.map((r) => (
                 <tr key={r.label}>
-                  <td className="py-2 pr-6 font-medium text-slate-800">{r.label}</td>
-                  <td className="py-2 pr-6">{yes(r.view)}</td>
-                  <td className="py-2 pr-6">{"invoice" in r ? yes(r.invoice) : ""}</td>
-                  <td className="py-2 pr-6">{"receipt" in r ? yes(r.receipt) : ""}</td>
-                  <td className="py-2">{"del" in r ? yes(r.del) : ""}</td>
+                  <td data-primary="" className="px-4 py-2.5 font-medium text-slate-800">{r.label}</td>
+                  <td data-label="View" className="px-4 py-2.5">{yes(r.view)}</td>
+                  <td data-label="Invoice" className="px-4 py-2.5">{"invoice" in r ? yes(r.invoice) : "—"}</td>
+                  <td data-label="Receipt" className="px-4 py-2.5">{"receipt" in r ? yes(r.receipt) : "—"}</td>
+                  <td data-label="Delete" className="px-4 py-2.5">{"del" in r ? yes(r.del) : "—"}</td>
                 </tr>
               ))}
             </tbody>

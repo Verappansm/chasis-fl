@@ -100,9 +100,9 @@ export function TourLauncher() {
       data-tour="tour-launcher"
       onClick={start}
       disabled={!ready}
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-100 disabled:opacity-50"
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="size-5" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="size-[18px] text-slate-500" aria-hidden>
         <circle cx="12" cy="12" r="9" />
         <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" />
       </svg>
@@ -114,6 +114,9 @@ export function TourLauncher() {
 /* ------------------------------------------------------------- overlay */
 
 type Rect = { top: number; left: number; width: number; height: number };
+
+/** Asks the collapsed mobile menu (NavShell) to open. */
+export const OPEN_NAV_EVENT = "chasis:open-nav";
 
 /** First matching element that is actually rendered (responsive layouts duplicate some). */
 function findTarget(target: string | undefined): HTMLElement | null {
@@ -206,6 +209,8 @@ function TourOverlay({
     const find = () => {
       if (cancelled) return;
       const found = findTarget(step.target);
+      // On small screens the menu is collapsed; open it for steps that point at a menu item.
+      if (!found && step.target?.startsWith("nav-")) window.dispatchEvent(new Event(OPEN_NAV_EVENT));
       if (found) {
         revealTarget(found);
         setEl(found);

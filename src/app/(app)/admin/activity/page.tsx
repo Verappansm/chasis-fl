@@ -61,7 +61,7 @@ function Changes({ changes }: { changes: AuditChange[] }) {
       <summary className="cursor-pointer text-xs font-medium text-indigo-700">
         {changes.length} field{changes.length === 1 ? "" : "s"} changed
       </summary>
-      <table className="mt-2 w-full text-xs">
+      <table className="mt-2 w-full table-fixed text-xs [overflow-wrap:anywhere]">
         <tbody className="divide-y divide-slate-100">
           {changes.map((c) => (
             <tr key={c.field}>
@@ -152,7 +152,7 @@ async function Activity({ searchParams }: { searchParams: PageProps<"/admin/acti
       </section>
 
       <Card>
-        <form action="/admin/activity" method="get" className="grid grid-cols-2 gap-3 border-b border-slate-200 p-4 md:grid-cols-3 xl:grid-cols-7">
+        <form action="/admin/activity" method="get" className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7">
           <Select name="user" label="User" value={f.user} options={usernames.map((u) => ({ value: u, label: u }))} />
           <Select name="entity" label="Area" value={f.entity} options={Object.entries(AUDIT_ENTITY_LABELS).map(([value, label]) => ({ value, label }))} />
           <Select name="action" label="Action" value={f.action} options={Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({ value, label }))} />
@@ -190,36 +190,37 @@ async function Activity({ searchParams }: { searchParams: PageProps<"/admin/acti
         {result.items.length === 0 ? (
           <EmptyState title="No activity matches these filters" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div>
+            <table className="rt rt-lg w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/70 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3">When (IST)</th>
-                  <th className="px-4 py-3">User</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">What</th>
-                  <th className="px-4 py-3">From</th>
+                  <th className="px-4 py-2.5">When (IST)</th>
+                  <th className="px-4 py-2.5">User</th>
+                  <th className="w-[45%] px-4 py-2.5">What</th>
+                  <th className="px-4 py-2.5">From</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 align-top">
                 {result.items.map((a) => (
-                  <tr key={a._id.toHexString()}>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500 tabular-nums">{when.format(a.at)}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900">
+                  <tr key={a._id.toHexString()} className="transition-colors hover:bg-slate-50/80">
+                    <td data-primary="" className="px-4 py-3 text-xs text-slate-500 tabular-nums">
+                      <span className="mr-2 inline-block lg:mb-1 lg:mr-0 lg:block">
+                        <Badge tone={ACTION_TONE[a.action]}>{AUDIT_ACTION_LABELS[a.action]}</Badge>
+                      </span>
+                      {when.format(a.at)}
+                    </td>
+                    <td data-label="User" className="px-4 py-3 font-medium text-slate-900">
                       <Link href={qs({ ...f, user: a.username })} className="hover:underline">
                         {a.username || "—"}
                       </Link>
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={ACTION_TONE[a.action]}>{AUDIT_ACTION_LABELS[a.action]}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td data-label="What" data-wide="" className="px-4 py-3 text-slate-700">
                       <What a={a} />
                       {a.changes && a.changes.length > 0 && <Changes changes={a.changes} />}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
+                    <td data-label="From" data-wide="" className="px-4 py-3 text-xs text-slate-500">
                       {a.ip ?? "—"}
-                      {a.userAgent && <span className="block max-w-56 truncate text-slate-400" title={a.userAgent}>{a.userAgent}</span>}
+                      {a.userAgent && <span className="block max-w-64 truncate text-slate-400" title={a.userAgent}>{a.userAgent}</span>}
                     </td>
                   </tr>
                 ))}
@@ -227,7 +228,7 @@ async function Activity({ searchParams }: { searchParams: PageProps<"/admin/acti
             </table>
           </div>
         )}
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
           <span>
             {result.total} entr{result.total === 1 ? "y" : "ies"}
           </span>

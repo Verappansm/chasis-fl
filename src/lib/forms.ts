@@ -69,11 +69,11 @@ export const purchaseSections: SectionDef[] = [
   },
   {
     title: "Demo lock-in",
-    description: "A demo car cannot be sold during its lock-in period. After that it is deflected and can be sold.",
+    description: "A demo car cannot be sold during its lock-in period. After that it is defleeted and can be sold.",
     showWhen: { field: "type", in: ["demo"] },
     fields: [
       { name: "lockInDays", label: "Lock-in period (days)", type: "number", hint: "Leave empty for the default from Constants" },
-      { name: "deflect", label: "Deflected on", type: "computed", formula: "purchase.deflect" },
+      { name: "deflect", label: "Defleeted on", type: "computed", formula: "purchase.deflect" },
     ],
   },
   {
@@ -91,14 +91,14 @@ export const purchaseSections: SectionDef[] = [
   {
     title: "Demo sale: profit or loss",
     description:
-      "A = selling price − purchase (negative is a loss on the car), shown both including GST and before GST. Net profit / loss = A + B + C. Purchase GST is usually reclaimed, so the before-GST figure is the truer margin.",
+      "Total SP − total purchase (negative is a loss on the car), shown both including GST and before GST. Net profit / loss = (SP − purchase) + loss claim + sales measure. Purchase GST is usually reclaimed, so the before-GST figure is the truer margin.",
     showWhen: { field: "type", in: ["demo"] },
     fields: [
-      { name: "diff", label: "A · Total SP − total purchase (incl. GST)", type: "computed", formula: "demo.diff" },
-      { name: "diffPre", label: "A · Selling price − purchase total (before GST)", type: "computed", formula: "demo.diffPre" },
+      { name: "diff", label: "Total SP − total purchase (incl. GST)", type: "computed", formula: "demo.diff" },
+      { name: "diffPre", label: "Selling price − purchase total (before GST)", type: "computed", formula: "demo.diffPre" },
       { name: "claimHint", label: "Loss claim eligibility", type: "computed", formula: "demo.claimHint", wide: true },
-      { name: "lossClaim", label: "B · Loss claim (Mercedes-Benz)", type: "money", hint: "Normally only when no demo discount was given" },
-      { name: "saleSalesMeasure", label: "C · Sales measure on sale", type: "money" },
+      { name: "lossClaim", label: "Loss claim (Mercedes-Benz)", type: "money", hint: "Normally only when no demo discount was given" },
+      { name: "saleSalesMeasure", label: "Sales measure on sale", type: "money" },
       { name: "net", label: "Net profit / loss (incl. GST)", type: "computed", formula: "demo.net" },
       { name: "netPre", label: "Net profit / loss (before GST)", type: "computed", formula: "demo.netPre" },
     ],
@@ -278,8 +278,8 @@ export function financeValues(doc?: FinanceDoc | null, ref?: string): Record<str
 const policyFields: FieldDef[] = [
   { name: "policyNumber", label: "Policy no", type: "code", maxLength: 60 },
   { name: "odPremium", label: "OD premium", type: "money", required: true, hint: "Own-damage premium (the insurance amount)" },
-  { name: "policyStartDate", label: "Policy start date", type: "date", required: true },
-  { name: "policyEndDate", label: "Policy end date", type: "date", required: true, hint: "Drives the renewal reminders" },
+  { name: "policyStartDate", label: "Policy start date", type: "date", required: true, allowFuture: true },
+  { name: "policyEndDate", label: "Policy end date", type: "date", required: true, allowFuture: true, hint: "Drives the renewal reminders" },
 ];
 
 export const insuranceSections: SectionDef[] = [

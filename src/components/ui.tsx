@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { PAGE_SIZE_OPTIONS, type PageSizeValue } from "@/lib/paging";
+import { PageSizeSelect } from "./page-size-select";
 
 export function PageHeader({
   title,
@@ -11,21 +13,21 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{title}</h1>
+        {description && <p className="mt-1.5 max-w-3xl text-sm leading-6 text-slate-500">{description}</p>}
       </div>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 export const buttonStyles = {
-  primary: `${buttonBase} bg-indigo-600 text-white hover:bg-indigo-700 focus-visible:outline-indigo-600`,
-  secondary: `${buttonBase} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus-visible:outline-slate-400`,
+  primary: `${buttonBase} bg-slate-900 text-white shadow-sm hover:bg-slate-800 focus-visible:outline-slate-900`,
+  secondary: `${buttonBase} border border-slate-200 bg-white text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-slate-400`,
   danger: `${buttonBase} border border-red-200 bg-white text-red-700 hover:bg-red-50 focus-visible:outline-red-600`,
 };
 
@@ -50,7 +52,7 @@ export function LinkButton({
 
 export function Card({ children, className = "", tour }: { children: ReactNode; className?: string; tour?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`} data-tour={tour}>
+    <div className={`rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgb(15_23_42/0.04)] ${className}`} data-tour={tour}>
       {children}
     </div>
   );
@@ -66,7 +68,7 @@ const badgeTones = {
 
 export function Badge({ tone, children }: { tone: keyof typeof badgeTones; children: ReactNode }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${badgeTones[tone]}`}>
+    <span className={`inline-flex items-center whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${badgeTones[tone]}`}>
       {children}
     </span>
   );
@@ -90,30 +92,72 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
   );
 }
 
-/** Table shell with horizontal scroll on small screens. */
-export function DataTable({ head, children }: { head: ReactNode; children: ReactNode }) {
+const STACK = { md: "rt rt-md", lg: "rt rt-lg", xl: "rt rt-xl" } as const;
+
+/**
+ * Table that never scrolls sideways: a normal table from the `stack`
+ * breakpoint up (cells wrap), a list of labelled cards below it.
+ * Give each Td a `label` (shown on the cards) and mark the first cell `primary`.
+ */
+export function DataTable({ head, children, stack = "lg" }: { head: ReactNode; children: ReactNode; stack?: keyof typeof STACK }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-          <tr>{head}</tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
-      </table>
-    </div>
+    <table className={`${STACK[stack]} w-full text-sm`}>
+      <thead className="border-b border-slate-200 bg-slate-50/70 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
+        <tr>{head}</tr>
+      </thead>
+      <tbody className="divide-y divide-slate-100">{children}</tbody>
+    </table>
   );
 }
 
-export function Th({ children, right }: { children?: ReactNode; right?: boolean }) {
-  return <th className={`whitespace-nowrap px-4 py-3 ${right ? "text-right" : ""}`}>{children}</th>;
+export function Th({ children, right, className = "" }: { children?: ReactNode; right?: boolean; className?: string }) {
+  return <th className={`px-4 py-2.5 align-bottom font-medium ${right ? "text-right" : ""} ${className}`}>{children}</th>;
 }
 
-export function Td({ children, right, mono }: { children?: ReactNode; right?: boolean; mono?: boolean }) {
+export function Td({
+  children,
+  right,
+  mono,
+  label,
+  primary,
+  wide,
+}: {
+  children?: ReactNode;
+  right?: boolean;
+  mono?: boolean;
+  /** Column name, shown above the value when rows stack as cards. */
+  label?: string;
+  /** Title of the card when rows stack (full width, no label). */
+  primary?: boolean;
+  /** Full card width when stacked. */
+  wide?: boolean;
+}) {
   return (
-    <td className={`whitespace-nowrap px-4 py-3 text-slate-700 ${right ? "text-right tabular-nums" : ""} ${mono ? "font-mono text-[13px]" : ""}`}>
+    <td
+      data-label={primary ? undefined : label}
+      data-primary={primary ? "" : undefined}
+      data-wide={wide ? "" : undefined}
+      className={`px-4 py-3 align-top text-slate-700 ${right ? "text-right tabular-nums" : ""} ${mono ? "font-mono text-[13px]" : ""}`}
+    >
       {children}
     </td>
   );
+}
+
+/** Second line inside a table cell. */
+export function Sub({ children, mono }: { children: ReactNode; mono?: boolean }) {
+  return <span className={`mt-0.5 block text-xs text-slate-500 ${mono ? "font-mono" : ""}`}>{children}</span>;
+}
+
+/** Sticky row tint for list rows. */
+export const rowClass = "transition-colors hover:bg-slate-50/80";
+
+function listHref(basePath: string, params: Record<string, string | undefined>, page?: number) {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
+  if (page && page > 1) sp.set("page", String(page));
+  const qs = sp.toString();
+  return qs ? `${basePath}?${qs}` : basePath;
 }
 
 export function Pagination({
@@ -129,17 +173,11 @@ export function Pagination({
   total: number;
   params: Record<string, string | undefined>;
 }) {
-  const href = (p: number) => {
-    const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
-    if (p > 1) sp.set("page", String(p));
-    const qs = sp.toString();
-    return qs ? `${basePath}?${qs}` : basePath;
-  };
+  const href = (p: number) => listHref(basePath, params, p);
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
-      <span>
-        {total} record{total === 1 ? "" : "s"}
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
+      <span className="tabular-nums">
+        {total.toLocaleString("en-IN")} record{total === 1 ? "" : "s"}
       </span>
       {pageCount > 1 && (
         <div className="flex items-center gap-2">
@@ -148,7 +186,7 @@ export function Pagination({
               Previous
             </Link>
           )}
-          <span>
+          <span className="tabular-nums">
             Page {page} of {pageCount}
           </span>
           {page < pageCount && (
@@ -176,50 +214,70 @@ export function ListToolbar({
   q,
   placeholder,
   filters = [],
+  pageSize,
+  extra = {},
 }: {
   basePath: string;
   q?: string;
   placeholder: string;
   filters?: FilterGroup[];
+  /** Shows the rows-per-page picker on the right. */
+  pageSize?: PageSizeValue;
+  /** Other params to keep when filters change (e.g. a view toggle). */
+  extra?: Record<string, string | undefined>;
 }) {
-  const hrefWith = (param: string, value: string) => {
-    const sp = new URLSearchParams();
-    if (q) sp.set("q", q);
-    for (const f of filters) {
-      const v = f.param === param ? value : f.value;
-      if (v && v !== f.options[0]?.value) sp.set(f.param, v);
-    }
-    const qs = sp.toString();
-    return qs ? `${basePath}?${qs}` : basePath;
+  const current = (): Record<string, string | undefined> => {
+    const p: Record<string, string | undefined> = { q, ...extra };
+    for (const f of filters) p[f.param] = f.value !== f.options[0]?.value ? f.value : undefined;
+    if (pageSize && pageSize !== PAGE_SIZE_OPTIONS[0].value) p.size = pageSize;
+    return p;
   };
+  const hrefWith = (param: string, value: string, isDefault: boolean) => listHref(basePath, { ...current(), [param]: isDefault ? undefined : value });
+  const keep = Object.entries(current()).filter(([k, v]) => k !== "q" && v);
   return (
     <div className="space-y-3 border-b border-slate-200 p-4">
-      <form action={basePath} method="get" className="flex w-full max-w-md gap-2">
-        {filters.map((f) => f.value !== f.options[0]?.value && <input key={f.param} type="hidden" name={f.param} value={f.value} />)}
-        <input
-          type="search"
-          name="q"
-          defaultValue={q}
-          placeholder={placeholder}
-          maxLength={60}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-        />
-        <button type="submit" className={buttonStyles.secondary}>
-          Search
-        </button>
-      </form>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <form action={basePath} method="get" className="flex w-full gap-2 sm:max-w-md" role="search">
+          {keep.map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
+          <div className="relative w-full">
+            <svg viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden>
+              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.47 9.77l3.13 3.13a.75.75 0 1 0 1.06-1.06l-3.13-3.13A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" />
+            </svg>
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder={placeholder}
+              aria-label="Search"
+              maxLength={60}
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm shadow-xs outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15"
+            />
+          </div>
+          <button type="submit" className={buttonStyles.secondary}>
+            Search
+          </button>
+        </form>
+        {pageSize && (
+          <PageSizeSelect
+            value={pageSize}
+            options={PAGE_SIZE_OPTIONS.map((o) => ({ ...o, href: hrefWith("size", o.value, o.value === PAGE_SIZE_OPTIONS[0].value) }))}
+          />
+        )}
+      </div>
       {filters.map((f) => (
-        <nav key={f.param} className="flex flex-wrap items-center gap-1" aria-label={`Filter by ${f.label.toLowerCase()}`}>
-          <span className="mr-1 w-14 text-xs font-medium text-slate-500">{f.label}</span>
-          {f.options.map((o) => {
+        <nav key={f.param} className="flex flex-wrap items-center gap-1.5" aria-label={`Filter by ${f.label.toLowerCase()}`}>
+          <span className="mr-1 w-full text-xs font-medium text-slate-500 sm:w-14">{f.label}</span>
+          {f.options.map((o, i) => {
             const active = o.value === f.value;
             return (
               <Link
                 key={o.value}
-                href={hrefWith(f.param, o.value)}
+                href={hrefWith(f.param, o.value, i === 0)}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  active ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
                 }`}
               >
                 {o.label}

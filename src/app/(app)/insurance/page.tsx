@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { IfCan } from "@/components/if-can";
 import { listInsurance, parseStage } from "@/lib/repo/modules";
 import { parsePeriod } from "@/lib/periods";
+import { parsePageSize } from "@/lib/paging";
 import { dateToInput, formatMoney } from "@/lib/format";
 import { DateText } from "@/components/date-text";
 import { ClaimRefs, LIST_PERIOD_OPTIONS, STAGE_OPTIONS, StageBadge } from "@/components/claims";
@@ -18,10 +19,12 @@ import {
   ListToolbar,
   PageHeader,
   Pagination,
+  Sub,
   TableSkeleton,
   Td,
   Th,
   one,
+  rowClass,
 } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Insurance payout" };
@@ -53,7 +56,8 @@ async function InsuranceList({ searchParams }: { searchParams: PageProps<"/insur
   const stage = parseStage(one(sp.stage));
   const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
-  const result = await listInsurance({ q, stage, period, page });
+  const size = parsePageSize(one(sp.size));
+  const result = await listInsurance({ size: size.size, q, stage, period, page });
 
   return (
     <>
@@ -62,6 +66,7 @@ async function InsuranceList({ searchParams }: { searchParams: PageProps<"/insur
         <ListToolbar
           basePath="/insurance"
           q={q}
+          pageSize={size.value}
           placeholder="Search chassis, commission, provider, policy, invoice"
           filters={[
             { param: "stage", label: "Stage", value: stage, options: STAGE_OPTIONS },
@@ -72,39 +77,44 @@ async function InsuranceList({ searchParams }: { searchParams: PageProps<"/insur
           <EmptyState title="No insurance payouts found" />
         ) : (
           <DataTable
+            stack="xl"
             head={
               <>
                 <Th>Commission / stock</Th>
-                <Th>Chassis</Th>
                 <Th>Provider</Th>
-                <Th>Policy</Th>
                 <Th>Policy period</Th>
-                <Th right>OD premium</Th>
-                <Th right>Total</Th>
+                <Th right>Premium / payout</Th>
                 <Th>Invoice / receipt</Th>
                 <Th>Stage</Th>
               </>
             }
           >
             {result.items.map((doc) => (
-              <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                <Td mono>
-                  <Link href={`/insurance/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
+              <tr key={doc._id.toHexString()} className={rowClass}>
+                <Td primary>
+                  <Link href={`/insurance/${doc._id.toHexString()}`} className="font-mono text-[13px] font-medium text-indigo-700 hover:underline">
                     {doc.dealRef}
                   </Link>
+                  <Sub mono>{doc.chassisNumber}</Sub>
                 </Td>
-                <Td mono>{doc.chassisNumber}</Td>
-                <Td>{doc.provider}</Td>
-                <Td mono>{doc.policyNumber ?? "—"}</Td>
-                <Td>
-                  <DateText iso={dateToInput(doc.policyStartDate)} /> → <DateText iso={dateToInput(doc.policyEndDate)} />
+                <Td label="Provider">
+                  {doc.provider}
+                  <Sub mono>{doc.policyNumber ?? "No policy no"}</Sub>
                 </Td>
-                <Td right>{formatMoney(doc.odPremium)}</Td>
-                <Td right>{formatMoney(doc.claimTotal)}</Td>
-                <Td>
+                <Td label="Policy period">
+                  <DateText iso={dateToInput(doc.policyStartDate)} />
+                  <Sub>
+                    to <DateText iso={dateToInput(doc.policyEndDate)} />
+                  </Sub>
+                </Td>
+                <Td label="Premium / payout" right>
+                  {formatMoney(doc.claimTotal)}
+                  <Sub>OD {formatMoney(doc.odPremium)}</Sub>
+                </Td>
+                <Td label="Invoice / receipt">
                   <ClaimRefs claim={doc} />
                 </Td>
-                <Td>
+                <Td label="Stage">
                   <StageBadge claim={doc} />
                 </Td>
               </tr>
@@ -116,7 +126,7 @@ async function InsuranceList({ searchParams }: { searchParams: PageProps<"/insur
           page={result.page}
           pageCount={result.pageCount}
           total={result.total}
-          params={{ q, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
+          params={{ size: size.value === "50" ? undefined : size.value, q, stage: stage === "all" ? undefined : stage, period: period === "all" ? undefined : period }}
         />
       </Card>
     </>

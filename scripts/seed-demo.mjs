@@ -279,7 +279,7 @@ try {
   }
 
   /**
-   * Demo cars: some still in lock-in, some deflected and waiting (a couple for
+   * Demo cars: some still in lock-in, some defleeted and waiting (a couple for
    * a long time), and many sold across the year, at a loss or a small profit.
    * Cars without a demo discount usually carry a loss claim with Mercedes-Benz.
    */

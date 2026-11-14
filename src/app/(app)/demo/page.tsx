@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { todayUtc } from "@/lib/repo/modules";
 import { DEMO_AGEING_DAYS, DEMO_STATUSES, demoStats, listDemo, parseDemoStatus } from "@/lib/repo/demo";
 import { parsePeriod, PERIODS } from "@/lib/periods";
+import { parsePageSize } from "@/lib/paging";
 import { dateToInput, formatMoney } from "@/lib/format";
 import { demoPnlBeforeGst, parseGstBasis, type GstBasis } from "@/lib/calc";
 import type { PurchaseDoc } from "@/lib/types";
@@ -22,10 +23,12 @@ import {
   ListToolbar,
   PageHeader,
   Pagination,
+  Sub,
   TableSkeleton,
   Td,
   Th,
   one,
+  rowClass,
 } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Demo stock" };
@@ -35,7 +38,7 @@ export default function DemoStockPage({ searchParams }: PageProps<"/demo">) {
     <>
       <PageHeader
         title="Demo stock"
-        description="Demo cars only: live (in lock-in), deflected and ready to sell, and sold, with the profit or loss on each sale."
+        description="Demo cars only: live (in lock-in), defleeted and ready to sell, and sold, with the profit or loss on each sale."
         action={
           <IfCan permission="purchases:invoice">
             <LinkButton href="/purchases/new?type=demo">New demo car</LinkButton>
@@ -52,7 +55,7 @@ export default function DemoStockPage({ searchParams }: PageProps<"/demo">) {
 
 const NET_SERIES = [
   { name: "Net profit / loss", fill: "fill-indigo-500", swatch: "bg-indigo-500" },
-  { name: "A · SP − purchase", fill: "fill-slate-300", swatch: "bg-slate-300" },
+  { name: "Total SP − total purchase", fill: "fill-slate-300", swatch: "bg-slate-300" },
 ];
 
 function signed(paise: number | undefined) {
@@ -70,7 +73,7 @@ function Stat({ label, value, detail, tone, href }: { label: string; value: stri
   const body = (
     <Card className={`h-full p-4 ${href ? "transition hover:border-indigo-300" : ""}`}>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-1.5 text-xl font-semibold tabular-nums ${color}`}>{value}</p>
+      <p className={`mt-1.5 whitespace-nowrap text-lg font-semibold tabular-nums sm:text-xl ${color}`}>{value}</p>
       {detail && <p className="mt-0.5 text-xs text-slate-500">{detail}</p>}
     </Card>
   );
@@ -122,7 +125,7 @@ function Status({ doc, today }: { doc: PurchaseDoc; today: Date }) {
     return <Badge tone="amber">Live · {left}d lock-in left</Badge>;
   }
   const since = doc.deflectDate ? Math.floor((today.getTime() - doc.deflectDate.getTime()) / 86_400_000) : 0;
-  return <Badge tone={since > DEMO_AGEING_DAYS ? "red" : "indigo"}>Deflected · {since}d unsold</Badge>;
+  return <Badge tone={since > DEMO_AGEING_DAYS ? "red" : "indigo"}>Defleeted · {since}d unsold</Badge>;
 }
 
 async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["searchParams"] }) {
@@ -132,8 +135,9 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
   const status = parseDemoStatus(one(sp.status));
   const period = parsePeriod(one(sp.period));
   const page = Number(one(sp.page) ?? 1);
+  const size = parsePageSize(one(sp.size));
   const basis = parseGstBasis(one(sp.gst));
-  const [stats, result] = await Promise.all([demoStats(period, basis), listDemo({ q, status, period, page })]);
+  const [stats, result] = await Promise.all([demoStats(period, basis), listDemo({ q, status, period, page, size: size.size })]);
   const today = todayUtc();
   const periodLabel = PERIODS.find((p) => p.value === period)!.label.toLowerCase();
   const { stock, sales } = stats;
@@ -156,13 +160,13 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
         <h2 id="h-demo-stock" className="mb-3 text-sm font-semibold text-slate-700">
           Stock right now
         </h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Stat label="Live (lock-in)" value={String(stock.live)} detail={`${stock.deflectingSoon} deflect in the next 30 days`} tone="amber" href={href("live")} />
-          <Stat label="Deflected" value={String(stock.deflected)} detail="Ready to sell" href={href("deflected")} />
+        <div className="grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6">
+          <Stat label="Live (lock-in)" value={String(stock.live)} detail={`${stock.deflectingSoon} defleet in the next 30 days`} tone="amber" href={href("live")} />
+          <Stat label="Defleeted" value={String(stock.deflected)} detail="Ready to sell" href={href("deflected")} />
           <Stat
-            label={`Deflected > ${DEMO_AGEING_DAYS} days`}
+            label={`Defleeted > ${DEMO_AGEING_DAYS} days`}
             value={String(stock.agedDeflected)}
-            detail="Unsold well after deflecting"
+            detail="Unsold well after defleeting"
             tone={stock.agedDeflected ? "red" : undefined}
             href={href("deflected")}
           />
@@ -179,11 +183,11 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
           </h2>
           <BasisToggle basis={basis} href={basisHref} />
         </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6">
           <Stat label="Cars sold" value={String(sales.count)} detail={`${sales.profitable} at a profit · ${sales.count - sales.profitable} at a loss`} />
-          <Stat label={`A · SP − purchase, ${gstWord}`} value={signed(sales.priceDifference)} detail={`SP ${shortMoney(sales.saleTotal)} vs purchase ${shortMoney(sales.purchaseTotal)}`} tone={sales.priceDifference < 0 ? "red" : "green"} />
-          <Stat label="B · Loss claims" value={formatMoney(sales.lossClaim)} />
-          <Stat label="C · Sales measure" value={formatMoney(sales.saleSalesMeasure)} />
+          <Stat label={`Total SP − total purchase, ${gstWord}`} value={signed(sales.priceDifference)} detail={`SP ${shortMoney(sales.saleTotal)} vs purchase ${shortMoney(sales.purchaseTotal)}`} tone={sales.priceDifference < 0 ? "red" : "green"} />
+          <Stat label="Loss claims (Mercedes-Benz)" value={formatMoney(sales.lossClaim)} />
+          <Stat label="Sales measure on sale" value={formatMoney(sales.saleSalesMeasure)} />
           <Stat
             label={`Net profit / loss, ${gstWord}`}
             value={signed(sales.netProfit)}
@@ -211,7 +215,7 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="p-5 xl:col-span-2">
           <h3 className="text-sm font-semibold text-slate-900">Demo sales P&amp;L by month</h3>
-          <p className="mt-0.5 text-xs text-slate-500">Net profit / loss (A + B + C) and the price difference A, {gstWord}, by sale month, last 12 months.</p>
+          <p className="mt-0.5 text-xs text-slate-500">Net profit / loss (SP − purchase + loss claim + sales measure) and the SP − purchase difference alone, {gstWord}, by sale month, last 12 months.</p>
           <div className="mt-4">
             <Legend series={NET_SERIES} />
             <BarChart
@@ -246,6 +250,8 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
         <ListToolbar
           basePath="/demo"
           q={q}
+          pageSize={size.value}
+          extra={{ gst: basis === "pre" ? "pre" : undefined }}
           placeholder="Search commission, chassis, model, class, buyer"
           filters={[
             { param: "status", label: "Status", value: status, options: DEMO_STATUSES },
@@ -256,56 +262,59 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
           <EmptyState title="No demo cars found">{q ? "Try a different search." : "Add a demo car from New demo car."}</EmptyState>
         ) : (
           <DataTable
+            stack="xl"
             head={
               <>
-                <Th>Commission no</Th>
+                <Th className="min-w-40">Commission no</Th>
                 <Th>Model</Th>
-                <Th>Purchased</Th>
-                <Th>Deflects / sold</Th>
                 <Th>Status</Th>
-                <Th right>{basis === "incl" ? "Total purchase" : "Purchase (pre-GST)"}</Th>
-                <Th right>{basis === "incl" ? "Total SP" : "SP (pre-GST)"}</Th>
-                <Th right>A</Th>
-                <Th right>B + C</Th>
-                <Th right>Net P&amp;L</Th>
+                <Th right>{basis === "incl" ? "Total purchase / total SP" : "Purchase / SP before GST"}</Th>
+                <Th right>{basis === "incl" ? "Total SP − total purchase" : "SP − purchase"}</Th>
+                <Th right>Loss claim</Th>
+                <Th right>Sales measure</Th>
+                <Th right>Net profit / loss</Th>
               </>
             }
           >
             {result.items.map((doc) => {
               const pnl = carPnl(doc, basis);
               return (
-              <tr key={doc._id.toHexString()} className="hover:bg-slate-50">
-                <Td mono>
-                  <Link href={`/purchases/${doc._id.toHexString()}`} className="font-medium text-indigo-700 hover:underline">
-                    {doc.commissionNo}
-                  </Link>
-                  <span className="block text-xs text-slate-400">{doc.chassisNumber}</span>
-                </Td>
-                <Td>
-                  {doc.model}
-                  <span className="block text-xs text-slate-400">{doc.carClass}</span>
-                </Td>
-                <Td>
-                  <DateText iso={dateToInput(doc.purchaseDate)} />
-                </Td>
-                <Td>
-                  <DateText iso={dateToInput(doc.saleDate ?? doc.deflectDate)} />
-                </Td>
-                <Td>
-                  <Status doc={doc} today={today} />
-                </Td>
-                <Td right>{formatMoney(pnl.purchase)}</Td>
-                <Td right>{formatMoney(pnl.sp)}</Td>
-                <Td right>
-                  <Money paise={pnl.diff} />
-                </Td>
-                <Td right>{doc.saleDate ? formatMoney((doc.lossClaim ?? 0) + (doc.saleSalesMeasure ?? 0)) : "—"}</Td>
-                <Td right>
-                  <span className="font-semibold">
-                    <Money paise={pnl.net} />
-                  </span>
-                </Td>
-              </tr>
+                <tr key={doc._id.toHexString()} className={rowClass}>
+                  <Td primary>
+                    <Link href={`/purchases/${doc._id.toHexString()}`} className="font-mono text-[13px] font-medium text-indigo-700 hover:underline">
+                      {doc.commissionNo}
+                    </Link>
+                    <Sub mono>{doc.chassisNumber}</Sub>
+                  </Td>
+                  <Td label="Model">
+                    {doc.model}
+                    <Sub>{doc.carClass}</Sub>
+                  </Td>
+                  <Td label="Status">
+                    <Status doc={doc} today={today} />
+                    <Sub>
+                      Bought <DateText iso={dateToInput(doc.purchaseDate)} />
+                    </Sub>
+                    <Sub>
+                      {doc.saleDate ? "Sold " : "Defleets "}
+                      <DateText iso={dateToInput(doc.saleDate ?? doc.deflectDate)} />
+                    </Sub>
+                  </Td>
+                  <Td label={basis === "incl" ? "Total purchase / total SP" : "Purchase / SP before GST"} right>
+                    {formatMoney(pnl.purchase)}
+                    <Sub>{pnl.sp === undefined ? "Not sold" : `SP ${formatMoney(pnl.sp)}`}</Sub>
+                  </Td>
+                  <Td label={basis === "incl" ? "Total SP − total purchase" : "SP − purchase"} right>
+                    <Money paise={pnl.diff} />
+                  </Td>
+                  <Td label="Loss claim" right>{doc.saleDate ? formatMoney(doc.lossClaim ?? 0) : "—"}</Td>
+                  <Td label="Sales measure" right>{doc.saleDate ? formatMoney(doc.saleSalesMeasure ?? 0) : "—"}</Td>
+                  <Td label="Net profit / loss" right>
+                    <span className="font-semibold">
+                      <Money paise={pnl.net} />
+                    </span>
+                  </Td>
+                </tr>
               );
             })}
           </DataTable>
@@ -315,7 +324,7 @@ async function Demo({ searchParams }: { searchParams: PageProps<"/demo">["search
           page={result.page}
           pageCount={result.pageCount}
           total={result.total}
-          params={{ q, status: status === "all" ? undefined : status, period: period === "all" ? undefined : period, gst: basis === "pre" ? "pre" : undefined }}
+          params={{ size: size.value === "50" ? undefined : size.value, q, status: status === "all" ? undefined : status, period: period === "all" ? undefined : period, gst: basis === "pre" ? "pre" : undefined }}
         />
       </Card>
     </div>

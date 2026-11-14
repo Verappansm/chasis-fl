@@ -512,7 +512,7 @@ export function parsePurchaseType(raw: string | undefined, extra: readonly strin
   return (PURCHASE_TYPES as readonly string[]).includes(v) || extra.includes(v) ? v : "all";
 }
 
-export async function listPurchases(opts: { q?: string; type: PurchaseTypeFilter; stage: StageFilter; period: Period; page: number }) {
+export async function listPurchases(opts: { q?: string; type: PurchaseTypeFilter; stage: StageFilter; period: Period; page: number; size?: number }) {
   const { purchases } = await collections();
   const filter = {
     ...searchFilter(opts.q, ["commissionNo", "customerName", "soldTo", "model", "benzInvoiceNo", "invoiceNo", "receiptNo"]),
@@ -520,7 +520,7 @@ export async function listPurchases(opts: { q?: string; type: PurchaseTypeFilter
     ...stageFilter(opts.stage),
     ...periodFilter("purchaseDate", opts.period),
   } as Filter<PurchaseDoc>;
-  return listRecords(purchases, filter, { purchaseDate: -1, _id: -1 }, opts.page);
+  return listRecords(purchases, filter, { purchaseDate: -1, _id: -1 }, opts.page, opts.size);
 }
 
 /* ----------------------------------------------------------------- pre-owned */
@@ -574,14 +574,14 @@ export async function getPreowned(id: string) {
 
 export type PreownedFilter = "all" | "in_stock" | "sold";
 
-export async function listPreowned(opts: { q?: string; status: PreownedFilter; period: Period; page: number }) {
+export async function listPreowned(opts: { q?: string; status: PreownedFilter; period: Period; page: number; size?: number }) {
   const { preowned } = await collections();
   const filter = {
     ...searchFilter(opts.q, ["stockNo", "registrationNo", "make", "model", "sellerName", "buyerName"]),
     ...(opts.status === "in_stock" ? { saleDate: { $exists: false } } : opts.status === "sold" ? { saleDate: { $exists: true } } : {}),
     ...periodFilter("purchaseDate", opts.period),
   } as Filter<PreownedDoc>;
-  return listRecords(preowned, filter, { purchaseDate: -1, _id: -1 }, opts.page);
+  return listRecords(preowned, filter, { purchaseDate: -1, _id: -1 }, opts.page, opts.size);
 }
 
 /* ------------------------------------------------------------------- payouts */
@@ -609,8 +609,24 @@ function assertDeletableClaim(existing: Partial<ClaimFields> | null) {
 
 /* finance */
 
+/** A car (chassis) gets one finance payout, even if it is sold again later. */
+export async function existingFinanceForCar(chassisNumber: string, exceptId?: ObjectId) {
+  const { finance } = await collections();
+  return finance.findOne(
+    { chassisNumber, ...(exceptId ? { _id: { $ne: exceptId } } : {}) },
+    { projection: { dealRef: 1, provider: 1, contractNo: 1 } },
+  );
+}
+
 async function buildFinance(input: FinanceInput, existing?: FinanceDoc | null): Promise<Payload<FinanceDoc>> {
   const [deal, lists, s] = await Promise.all([requireSoldDeal(input.dealRef), getOptionLists(), getSettings()]);
+  const other = await existingFinanceForCar(deal.chassisNumber, existing?._id);
+  if (other) {
+    throw new ValidationError(
+      "dealRef",
+      `This car (chassis ${deal.chassisNumber}) already has a finance payout under ${other.dealRef}. A car can only have one.`,
+    );
+  }
   if (deal.carValue !== undefined && input.loanAmount > loanCap(deal.carValue, s.loanCapBp)) {
     throw new ValidationError(
       "loanAmount",
@@ -662,14 +678,14 @@ export async function getFinance(id: string) {
   return findRecord(finance, id);
 }
 
-export async function listFinance(opts: { q?: string; stage: StageFilter; period: Period; page: number }) {
+export async function listFinance(opts: { q?: string; stage: StageFilter; period: Period; page: number; size?: number }) {
   const { finance } = await collections();
   const filter = {
     ...searchFilter(opts.q, ["provider", "dealRef", "contractNo", "invoiceNo", "receiptNo"]),
     ...stageFilter(opts.stage),
     ...periodFilter("disbursalDate", opts.period),
   } as Filter<FinanceDoc>;
-  return listRecords(finance, filter, { disbursalDate: -1, _id: -1 }, opts.page);
+  return listRecords(finance, filter, { disbursalDate: -1, _id: -1 }, opts.page, opts.size);
 }
 
 /* insurance */
@@ -741,14 +757,14 @@ export async function getInsurance(id: string) {
   return findRecord(insurance, id);
 }
 
-export async function listInsurance(opts: { q?: string; stage: StageFilter; period: Period; page: number }) {
+export async function listInsurance(opts: { q?: string; stage: StageFilter; period: Period; page: number; size?: number }) {
   const { insurance } = await collections();
   const filter = {
     ...searchFilter(opts.q, ["provider", "policyNumber", "dealRef", "invoiceNo", "receiptNo"]),
     ...stageFilter(opts.stage),
     ...periodFilter("policyStartDate", opts.period),
   } as Filter<InsuranceDoc>;
-  return listRecords(insurance, filter, { policyStartDate: -1, _id: -1 }, opts.page);
+  return listRecords(insurance, filter, { policyStartDate: -1, _id: -1 }, opts.page, opts.size);
 }
 
 /* renewals */
@@ -808,14 +824,14 @@ export async function getRenewal(id: string) {
   return findRecord(renewals, id);
 }
 
-export async function listRenewals(opts: { q?: string; stage: StageFilter; period: Period; page: number }) {
+export async function listRenewals(opts: { q?: string; stage: StageFilter; period: Period; page: number; size?: number }) {
   const { renewals } = await collections();
   const filter = {
     ...searchFilter(opts.q, ["provider", "policyNumber", "dealRef", "invoiceNo", "receiptNo"]),
     ...stageFilter(opts.stage),
     ...periodFilter("policyStartDate", opts.period),
   } as Filter<RenewalDoc>;
-  return listRecords(renewals, filter, { policyStartDate: -1, _id: -1 }, opts.page);
+  return listRecords(renewals, filter, { policyStartDate: -1, _id: -1 }, opts.page, opts.size);
 }
 
 export interface ExpiringPolicy {
