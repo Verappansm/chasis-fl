@@ -15,6 +15,8 @@ export const DEFAULT_RATES = {
   financeTdsRateBp: 200,
   insuranceTdsRateBp: 200,
   demoLockInDays: 90,
+  /** Highest loan value as a share of the car value (selling price + GST); above 100% allows on-road funding. */
+  loanCapBp: 13000,
 };
 export type Rates = typeof DEFAULT_RATES;
 
@@ -59,6 +61,23 @@ export function saleTotals(salePrice: Paise, saleGstRateBp: BasisPoints) {
 export function demoPnl(p: { finalPrice: Paise; saleTotal: Paise; lossClaim: Paise; saleSalesMeasure: Paise }) {
   const priceDifference = p.saleTotal - p.finalPrice;
   return { priceDifference, netProfit: priceDifference + p.lossClaim + p.saleSalesMeasure };
+}
+
+/** The same P&L on amounts before GST (selling price vs purchase total), since purchase GST is usually reclaimed. */
+export function demoPnlBeforeGst(p: { taxableAmount: Paise; salePrice: Paise; lossClaim: Paise; saleSalesMeasure: Paise }) {
+  const priceDifference = p.salePrice - p.taxableAmount;
+  return { priceDifference, netProfit: priceDifference + p.lossClaim + p.saleSalesMeasure };
+}
+
+/** Which amounts the demo P&L compares. */
+export type GstBasis = "incl" | "pre";
+export function parseGstBasis(raw: string | undefined): GstBasis {
+  return raw === "pre" ? "pre" : "incl";
+}
+
+/** Highest loan value allowed on a car of this value. */
+export function loanCap(carValue: Paise, loanCapBp: BasisPoints): Paise {
+  return percentOf(carValue, loanCapBp);
 }
 
 /** A loss claim is normally only available when the car carried no demo discount. */
@@ -140,6 +159,15 @@ function pnlFrom(v: Values, ctx: FormulaContext) {
   });
 }
 
+function pnlPreFrom(v: Values, ctx: FormulaContext) {
+  return demoPnlBeforeGst({
+    taxableAmount: purchaseFrom(v, ctx).taxableAmount,
+    salePrice: rupeesToPaise(v.salePrice),
+    lossClaim: rupeesToPaise(v.lossClaim),
+    saleSalesMeasure: rupeesToPaise(v.saleSalesMeasure),
+  });
+}
+
 const signed = (paise: Paise) => (paise > 0 ? `+${show(paise)}` : show(paise));
 const hasSale = (v: Values) => rupeesToPaise(v.salePrice) > 0;
 
@@ -171,6 +199,8 @@ export const FORMULAS = {
       ? "Eligible: no demo discount on this car"
       : "Not normally eligible: this car had a demo discount (you can still enter a claim)",
   "demo.net": (v: Values, c: FormulaContext) => (hasSale(v) ? signed(pnlFrom(v, c).netProfit) : "—"),
+  "demo.diffPre": (v: Values, c: FormulaContext) => (hasSale(v) ? signed(pnlPreFrom(v, c).priceDifference) : "—"),
+  "demo.netPre": (v: Values, c: FormulaContext) => (hasSale(v) ? signed(pnlPreFrom(v, c).netProfit) : "—"),
   "claim.gst": (v: Values, c: FormulaContext) => show(claimTotals(rupeesToPaise(v.claimAmount), c.serviceGstRateBp).claimGst),
   "claim.total": (v: Values, c: FormulaContext) => show(claimTotals(rupeesToPaise(v.claimAmount), c.serviceGstRateBp).claimTotal),
 } satisfies Record<string, (v: Values, c: FormulaContext) => string>;

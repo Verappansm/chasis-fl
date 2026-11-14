@@ -29,6 +29,7 @@ import {
   claimStage,
   claimTotals,
   demoPnl,
+  loanCap,
   percentOf,
   purchaseGstRate,
   purchaseTotals,
@@ -263,8 +264,11 @@ export interface Deal {
   customer?: string;
   sold: boolean;
   saleDate?: Date;
-  /** What the customer's car is worth: total selling price if recorded, else final purchase price. Caps the loan value. */
+  /** What the customer's car is worth: total selling price if recorded, else final purchase price. The loan cap is a share of it. */
   carValue?: number;
+  /** carValue split into price before GST and GST (no GST is tracked on pre-owned cars). */
+  carPrice?: number;
+  carGst?: number;
 }
 
 export function isPurchaseSold(p: Pick<PurchaseDoc, "type" | "saleDate">): boolean {
@@ -282,7 +286,9 @@ function purchaseDeal(p: PurchaseDoc): Deal {
     customer: p.type === "new" ? p.customerName : p.soldTo,
     sold: isPurchaseSold(p),
     saleDate: p.type === "new" ? p.purchaseDate : p.saleDate,
-    carValue: p.saleTotal ?? p.salePrice ?? p.finalPrice,
+    ...(p.salePrice !== undefined
+      ? { carPrice: p.salePrice, carGst: p.saleGst ?? 0, carValue: p.saleTotal ?? p.salePrice }
+      : { carPrice: p.taxableAmount, carGst: p.gstAmount, carValue: p.finalPrice }),
   };
 }
 
@@ -298,6 +304,8 @@ function preownedDeal(p: PreownedDoc): Deal {
     sold: Boolean(p.saleDate),
     saleDate: p.saleDate,
     carValue: p.salePrice ?? p.purchasePrice,
+    carPrice: p.salePrice ?? p.purchasePrice,
+    carGst: 0,
   };
 }
 
@@ -602,9 +610,12 @@ function assertDeletableClaim(existing: Partial<ClaimFields> | null) {
 /* finance */
 
 async function buildFinance(input: FinanceInput, existing?: FinanceDoc | null): Promise<Payload<FinanceDoc>> {
-  const [deal, lists] = await Promise.all([requireSoldDeal(input.dealRef), getOptionLists()]);
-  if (deal.carValue !== undefined && input.loanAmount > deal.carValue) {
-    throw new ValidationError("loanAmount", `Loan value cannot be above the car value (${formatMoney(deal.carValue)}).`);
+  const [deal, lists, s] = await Promise.all([requireSoldDeal(input.dealRef), getOptionLists(), getSettings()]);
+  if (deal.carValue !== undefined && input.loanAmount > loanCap(deal.carValue, s.loanCapBp)) {
+    throw new ValidationError(
+      "loanAmount",
+      `Loan value cannot be above ${formatMoney(loanCap(deal.carValue, s.loanCapBp))} (${s.loanCapBp / 100}% of the car value ${formatMoney(deal.carValue)}).`,
+    );
   }
   if (deal.saleDate && input.disbursalDate < deal.saleDate) {
     throw new ValidationError("disbursalDate", `Disbursal date cannot be before the sale (${formatDay(deal.saleDate)}).`);

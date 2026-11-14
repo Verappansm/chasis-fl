@@ -61,6 +61,8 @@ export interface SettingsDoc {
   tdsRateBp?: BasisPoints;
   /** Days a demo car is locked after purchase before it is deflected and can be sold. */
   demoLockInDays: number;
+  /** Loan cap as a share of the car value. */
+  loanCapBp?: BasisPoints;
   updatedAt?: Date;
   updatedBy?: string;
   version: number;

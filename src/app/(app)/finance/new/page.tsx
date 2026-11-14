@@ -7,7 +7,7 @@ import { getOptionLists } from "@/lib/repo/options";
 import { RecordForm } from "@/components/record-form";
 import { DealCard, DealPicker } from "@/components/claims";
 import { PageHeader, TableSkeleton, one } from "@/components/ui";
-import { financeSections, financeValues } from "@/lib/forms";
+import { financeSectionsFor, financeValues } from "@/lib/forms";
 import { saveFinance } from "../actions";
 
 export const metadata: Metadata = { title: "New finance payout" };
@@ -36,7 +36,7 @@ async function Form({ searchParams }: { searchParams: PageProps<"/finance/new">[
       <DealCard deal={deal} />
       <RecordForm
         action={saveFinance}
-        sections={financeSections}
+        sections={financeSectionsFor(deal, rates.loanCapBp)}
         initial={financeValues(null, deal.ref)}
         readOnlyFields={["dealRef"]}
         cancelHref="/finance"

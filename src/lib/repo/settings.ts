@@ -25,6 +25,7 @@ export const getSettings = cache(async (): Promise<Rates & { version: number }> 
     financeTdsRateBp: doc?.financeTdsRateBp ?? legacyTds ?? DEFAULT_RATES.financeTdsRateBp,
     insuranceTdsRateBp: doc?.insuranceTdsRateBp ?? legacyTds ?? DEFAULT_RATES.insuranceTdsRateBp,
     demoLockInDays: doc?.demoLockInDays ?? DEFAULT_RATES.demoLockInDays,
+    loanCapBp: doc?.loanCapBp ?? DEFAULT_RATES.loanCapBp,
     version: doc?.version ?? 0,
   };
 });

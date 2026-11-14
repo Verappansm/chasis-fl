@@ -12,7 +12,7 @@ import { ReceiptForm } from "@/components/receipt-form";
 import { DealCard, receiptProps } from "@/components/claims";
 import { Flash, PageHeader, TableSkeleton, one } from "@/components/ui";
 import { AuditFooter } from "@/components/audit-footer";
-import { financeSections, financeValues } from "@/lib/forms";
+import { financeSectionsFor, financeValues } from "@/lib/forms";
 import { removeFinance, removeFinanceReceiptAction, saveFinance, saveFinanceReceiptAction } from "../actions";
 
 export const metadata: Metadata = { title: "Finance payout" };
@@ -51,7 +51,7 @@ async function Editor({
       <div className="space-y-6">
         <RecordForm
           action={saveFinance}
-          sections={financeSections}
+          sections={financeSectionsFor(deal, settings.loanCapBp)}
           initial={financeValues(doc)}
           record={record}
           cancelHref="/finance"

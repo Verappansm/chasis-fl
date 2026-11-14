@@ -165,6 +165,7 @@ export const settingsSchema = z.object({
   fcTdsRateBp: percentField("TDS by Mercedes-Benz", 20),
   financeTdsRateBp: percentField("TDS by finance providers", 20),
   insuranceTdsRateBp: percentField("TDS by insurers", 20),
+  loanCapBp: percentField("Loan cap", 300),
   demoLockInDays: optionalIntField("Demo lock-in", 0, 730).pipe(z.number({ message: "Demo lock-in is required" })),
 });
 export type SettingsInput = z.output<typeof settingsSchema>;

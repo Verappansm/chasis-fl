@@ -198,7 +198,7 @@ async function Overview({ searchParams }: { searchParams: PageProps<"/overview">
           <Tile
             label={`Demo cars net P&L, ${periodLabel}`}
             value={formatMoney(ch.demo.netProfit)}
-            detail={`${ch.demo.sold} demo car${ch.demo.sold === 1 ? "" : "s"} sold`}
+            detail={`${ch.demo.sold} demo car${ch.demo.sold === 1 ? "" : "s"} sold · incl. GST`}
             tone={ch.demo.netProfit < 0 ? "red" : ch.demo.sold ? "green" : undefined}
             href={`/demo${period === "month" ? "" : `?period=${period}`}`}
           />

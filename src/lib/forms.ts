@@ -1,5 +1,6 @@
 import type { FieldDef, SectionDef } from "@/components/record-form";
-import { dateToInput, paiseToInput } from "@/lib/format";
+import { dateToInput, formatMoney, paiseToInput } from "@/lib/format";
+import { percentOf } from "@/lib/calc";
 import {
   GRADES,
   GRADE_LABELS,
@@ -84,19 +85,22 @@ export const purchaseSections: SectionDef[] = [
       { name: "soldTo", label: "Sold to", type: "text" },
       { name: "salePrice", label: "Selling price (before GST)", type: "money" },
       { name: "saleGst", label: "GST on selling price", type: "computed", formula: "sale.gst" },
-      { name: "saleTotal", label: "Total selling price", type: "computed", formula: "sale.total", wide: true, hint: "Car value; caps the loan value on a finance payout" },
+      { name: "saleTotal", label: "Total selling price", type: "computed", formula: "sale.total", wide: true, hint: "Car value; the loan cap on a finance payout is a share of this (set in Constants)" },
     ],
   },
   {
     title: "Demo sale: profit or loss",
-    description: "A = total selling price − total purchase (negative is a loss on the car). Net profit / loss = A + B + C.",
+    description:
+      "A = selling price − purchase (negative is a loss on the car), shown both including GST and before GST. Net profit / loss = A + B + C. Purchase GST is usually reclaimed, so the before-GST figure is the truer margin.",
     showWhen: { field: "type", in: ["demo"] },
     fields: [
-      { name: "diff", label: "A · Total SP − total purchase", type: "computed", formula: "demo.diff", wide: true },
+      { name: "diff", label: "A · Total SP − total purchase (incl. GST)", type: "computed", formula: "demo.diff" },
+      { name: "diffPre", label: "A · Selling price − purchase total (before GST)", type: "computed", formula: "demo.diffPre" },
       { name: "claimHint", label: "Loss claim eligibility", type: "computed", formula: "demo.claimHint", wide: true },
       { name: "lossClaim", label: "B · Loss claim (Mercedes-Benz)", type: "money", hint: "Normally only when no demo discount was given" },
       { name: "saleSalesMeasure", label: "C · Sales measure on sale", type: "money" },
-      { name: "net", label: "Net profit / loss (A + B + C)", type: "computed", formula: "demo.net", wide: true },
+      { name: "net", label: "Net profit / loss (incl. GST)", type: "computed", formula: "demo.net" },
+      { name: "netPre", label: "Net profit / loss (before GST)", type: "computed", formula: "demo.netPre" },
     ],
   },
   {
@@ -239,13 +243,26 @@ export const financeSections: SectionDef[] = [
     fields: [
       dealRef,
       { name: "provider", label: "Finance provider", type: "text", list: "financeProvider", required: true, hint: "Bank / NBFC, e.g. ICICI Bank" },
-      { name: "loanAmount", label: "Loan value", type: "money", required: true, hint: "Cannot be above the car value" },
+      { name: "loanAmount", label: "Loan value", type: "money", required: true, hint: "Capped at a share of the car value, set in Constants" },
       { name: "contractNo", label: "Contract no", type: "code", required: true },
       { name: "disbursalDate", label: "Disbursal date", type: "date", required: true },
     ],
   },
   claimSection,
 ];
+
+/** Finance sections with the car's price, GST, total and loan cap shown under the loan value. */
+export function financeSectionsFor(deal: { carPrice?: number; carGst?: number; carValue?: number } | null, loanCapBp: number): SectionDef[] {
+  if (deal?.carValue === undefined) return financeSections;
+  const cap = percentOf(deal.carValue, loanCapBp);
+  const hint =
+    `Car price ${formatMoney(deal.carPrice)} + GST ${formatMoney(deal.carGst ?? 0)} = total ${formatMoney(deal.carValue)}. ` +
+    `Loan up to ${formatMoney(cap)} (${loanCapBp / 100}% of total).`;
+  return financeSections.map((sec) => ({
+    ...sec,
+    fields: sec.fields.map((fd) => (fd.name === "loanAmount" ? { ...fd, hint } : fd)),
+  }));
+}
 
 export function financeValues(doc?: FinanceDoc | null, ref?: string): Record<string, string> {
   return {
