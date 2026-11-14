@@ -8,9 +8,24 @@ import { env } from "@/lib/env";
  */
 const globalForMongo = globalThis as unknown as { _mongoClientPromise?: Promise<MongoClient> };
 
+/**
+ * Data in transit to the database must be encrypted. `mongodb+srv://` (Atlas)
+ * turns TLS on by default; a plain `mongodb://` URI is only accepted for a
+ * local database in development.
+ */
+function tlsOptions(uri: string) {
+  const local = /^mongodb:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(uri);
+  if (/[?&](tls|ssl)=false/i.test(uri)) {
+    throw new Error("MONGODB_URI disables TLS. Remove tls=false: database traffic must be encrypted.");
+  }
+  if (env.isProd && local) throw new Error("MONGODB_URI points at a local database in production.");
+  return local && !env.isProd ? {} : { tls: true };
+}
+
 function getClient(): Promise<MongoClient> {
   if (!globalForMongo._mongoClientPromise) {
     const client = new MongoClient(env.mongoUri, {
+      ...tlsOptions(env.mongoUri),
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 8000,
       appName: "chasis-erp",

@@ -2,7 +2,12 @@ import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "@/lib/env";
 
-export const SESSION_COOKIE = "chasis_session";
+/**
+ * In production the `__Host-` prefix makes the browser refuse the cookie
+ * unless it is Secure, host-only and path=/ (no subdomain can set or read it).
+ * Local development runs on http, where that prefix is not allowed.
+ */
+export const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-chasis_session" : "chasis_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60; // one working day
 
 export interface SessionPayload {
