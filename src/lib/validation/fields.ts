@@ -120,30 +120,78 @@ export function enumField<const T extends readonly [string, ...string[]]>(values
   return z.enum(values, { message: `Select a valid ${label.toLowerCase()}` });
 }
 
-/** Shared rule for "incentive received" flags. */
-export function refineReceived(
-  data: { incentiveReceived: boolean; initiatedDate: Date; receivedDate?: Date },
-  ctx: z.RefinementCtx,
-) {
-  if (data.incentiveReceived && !data.receivedDate) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["receivedDate"],
-      message: "Received date is required when the incentive is marked received",
+/** Optional money that defaults to zero (deductions, offers). */
+export function moneyOrZeroField(label: string) {
+  return optionalMoneyField(label).transform((v) => v ?? 0);
+}
+
+/** Reference numbers (commission no, invoice no…): trimmed, upper-cased, inner spaces removed. */
+export function codeField(label: string, max = 40) {
+  return z
+    .string({ message: `${label} is required` })
+    .transform((v) => v.replace(/\s+/g, "").toUpperCase())
+    .pipe(
+      z
+        .string()
+        .min(1, `${label} is required`)
+        .max(max, `${label} must be at most ${max} characters`)
+        .regex(/^[A-Z0-9/_.-]+$/, `${label} may contain only letters, digits and / - _ .`),
+    );
+}
+
+export function optionalCodeField(label: string, max = 40) {
+  return z
+    .string()
+    .optional()
+    .transform((v) => (v ?? "").replace(/\s+/g, "").toUpperCase())
+    .pipe(
+      z
+        .string()
+        .max(max, `${label} must be at most ${max} characters`)
+        .regex(/^[A-Z0-9/_.-]*$/, `${label} may contain only letters, digits and / - _ .`),
+    )
+    .transform((v) => (v ? v : undefined));
+}
+
+export function optionalIntField(label: string, min: number, max: number) {
+  return z
+    .string()
+    .trim()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v) return undefined;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < min || n > max) {
+        ctx.addIssue({ code: "custom", message: `${label} must be a whole number from ${min} to ${max}` });
+        return z.NEVER;
+      }
+      return n;
     });
+}
+
+/** Percentage typed as "3.5" → basis points (350). */
+export function percentField(label: string, max = 100) {
+  return z
+    .string({ message: `${label} is required` })
+    .trim()
+    .transform((v, ctx) => {
+      if (!/^\d{1,3}(\.\d{1,2})?$/.test(v) || Number(v) > max) {
+        ctx.addIssue({ code: "custom", message: `${label} must be a percentage from 0 to ${max}, up to 2 decimals` });
+        return z.NEVER;
+      }
+      return Math.round(Number(v) * 100);
+    });
+}
+
+/** Invoice number and date go together. */
+export function refineInvoice(data: { invoiceNo?: string; invoiceDate?: Date }, ctx: z.RefinementCtx, after?: { date?: Date; label: string }) {
+  if (data.invoiceNo && !data.invoiceDate) {
+    ctx.addIssue({ code: "custom", path: ["invoiceDate"], message: "Invoice date is required with the invoice number" });
   }
-  if (!data.incentiveReceived && data.receivedDate) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["receivedDate"],
-      message: "Tick \"Incentive received\" or clear the received date",
-    });
+  if (!data.invoiceNo && data.invoiceDate) {
+    ctx.addIssue({ code: "custom", path: ["invoiceNo"], message: "Enter the invoice number, or clear the invoice date" });
   }
-  if (data.receivedDate && data.receivedDate < data.initiatedDate) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["receivedDate"],
-      message: "Received date cannot be before the initiated date",
-    });
+  if (data.invoiceDate && after?.date && data.invoiceDate < after.date) {
+    ctx.addIssue({ code: "custom", path: ["invoiceDate"], message: `Invoice date cannot be before the ${after.label}` });
   }
 }

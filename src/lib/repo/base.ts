@@ -1,9 +1,12 @@
 import "server-only";
 import { ObjectId, type Collection, type Document, type Filter, type Sort } from "mongodb";
+import { headers } from "next/headers";
 import { collections } from "@/lib/db/collections";
-import type { CurrentUser } from "@/lib/auth/dal";
-import type { AuditEntity, AuditFields } from "@/lib/types";
+import type { AuditAction, AuditChange, AuditEntity, AuditFields } from "@/lib/types";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
+
+/** Who is acting (a signed-in user). */
+export type Actor = { id: string; username: string };
 
 export type BaseDoc = AuditFields & { _id: ObjectId; chassisNumber: string };
 /** The business fields of a document — what a validated form produces. */
@@ -35,57 +38,95 @@ function stripUndefined<T extends Record<string, unknown>>(data: T): T {
   return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as T;
 }
 
+/** Bookkeeping fields left out of the change list. */
+const NOISE = new Set(["_id", "createdAt", "createdBy", "updatedAt", "updatedBy", "version", "passwordHash", "demo"]);
+
+function same(a: unknown, b: unknown): boolean {
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (a instanceof ObjectId && b instanceof ObjectId) return a.equals(b);
+  if (typeof a === "object" && a !== null && typeof b === "object" && b !== null) return JSON.stringify(a) === JSON.stringify(b);
+  return a === b;
+}
+
+/** Field-by-field differences between two snapshots of a document. */
+export function diff(before: unknown, after: unknown): AuditChange[] {
+  if (!before || !after || typeof before !== "object" || typeof after !== "object") return [];
+  const b = before as Record<string, unknown>;
+  const a = after as Record<string, unknown>;
+  const changes: AuditChange[] = [];
+  for (const field of new Set([...Object.keys(b), ...Object.keys(a)])) {
+    if (NOISE.has(field) || same(b[field], a[field])) continue;
+    changes.push({ field, from: b[field], to: a[field] });
+  }
+  return changes;
+}
+
+/** Human reference for a record in the activity log. */
+export function refOf(doc: unknown): string | undefined {
+  if (!doc || typeof doc !== "object") return undefined;
+  const d = doc as Record<string, unknown>;
+  const ref = d.commissionNo ?? d.stockNo ?? d.dealRef ?? d.username;
+  return typeof ref === "string" ? ref : undefined;
+}
+
+async function requestMeta(): Promise<{ ip?: string; userAgent?: string }> {
+  try {
+    const h = await headers();
+    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || undefined;
+    return { ip, userAgent: h.get("user-agent")?.slice(0, 200) || undefined };
+  } catch {
+    return {}; // outside a request (scripts)
+  }
+}
+
+/**
+ * Appends to the activity log. The log is append-only: nothing in the app
+ * updates or deletes entries. A failure to log never hides the result of the
+ * change itself, but is reported on the server.
+ */
 export async function writeAudit(entry: {
-  user: CurrentUser;
-  action: "create" | "update" | "delete" | "login";
+  user: { id: string; username: string } | null;
+  action: AuditAction;
   entity: AuditEntity;
   entityId?: string;
+  ref?: string;
   chassisNumber?: string;
+  detail?: string;
+  /** Username typed on a failed login (there is no user). */
+  username?: string;
   before?: unknown;
   after?: unknown;
 }) {
-  const { auditLogs } = await collections();
-  await auditLogs.insertOne({
-    _id: new ObjectId(),
-    at: new Date(),
-    userId: entry.user.id,
-    username: entry.user.username,
-    action: entry.action,
-    entity: entry.entity,
-    entityId: entry.entityId,
-    chassisNumber: entry.chassisNumber,
-    before: entry.before,
-    after: entry.after,
-  });
-}
-
-/** Every business record hangs off a vehicle; make sure one exists. */
-export async function ensureVehicle(chassisNumber: string, user: CurrentUser) {
-  const { vehicles } = await collections();
-  const now = new Date();
-  await vehicles.updateOne(
-    { chassisNumber },
-    {
-      $setOnInsert: {
-        chassisNumber,
-        createdAt: now,
-        createdBy: user.username,
-        updatedAt: now,
-        updatedBy: user.username,
-        version: 1,
-      },
-    },
-    { upsert: true },
-  );
+  try {
+    const { auditLogs } = await collections();
+    const changes = entry.action === "update" ? diff(entry.before, entry.after) : undefined;
+    await auditLogs.insertOne({
+      _id: new ObjectId(),
+      at: new Date(),
+      userId: entry.user?.id ?? "",
+      username: entry.user?.username ?? entry.username ?? "",
+      action: entry.action,
+      entity: entry.entity,
+      entityId: entry.entityId,
+      ref: entry.ref ?? refOf(entry.after) ?? refOf(entry.before),
+      chassisNumber: entry.chassisNumber,
+      changes: changes?.length ? changes : undefined,
+      detail: entry.detail,
+      ...(await requestMeta()),
+      before: entry.before,
+      after: entry.after,
+    });
+  } catch (err) {
+    console.error("[audit] could not write entry", entry.action, entry.entity, err);
+  }
 }
 
 export async function insertRecord<T extends BaseDoc>(
   col: Collection<T>,
   entity: AuditEntity,
   data: Payload<T>,
-  user: CurrentUser,
+  user: Actor,
 ): Promise<string> {
-  await ensureVehicle(data.chassisNumber, user);
   const now = new Date();
   const doc = {
     ...stripUndefined(data as Record<string, unknown>),
@@ -107,8 +148,10 @@ export async function updateRecord<T extends BaseDoc>(
   entity: AuditEntity,
   id: string,
   expectedVersion: number,
-  data: Payload<T>,
-  user: CurrentUser,
+  data: Partial<Payload<T>>,
+  user: Actor,
+  /** Key fields that may not change once the record exists. */
+  immutable: { field: string; label: string }[] = [{ field: "chassisNumber", label: "Chassis number" }],
 ): Promise<void> {
   const raw = col as unknown as Collection<Document>;
   const _id = toObjectId(id);
@@ -117,8 +160,11 @@ export async function updateRecord<T extends BaseDoc>(
   if (existing.version !== expectedVersion) {
     throw new ConflictError("Someone else changed this record after you opened it. Reload and try again.");
   }
-  if (existing.chassisNumber !== data.chassisNumber) {
-    throw new ValidationError("chassisNumber", "Chassis number cannot be changed. Delete and re-create the record instead.");
+  for (const { field, label } of immutable) {
+    const next = (data as Record<string, unknown>)[field];
+    if (next !== undefined && existing[field] !== next) {
+      throw new ValidationError(field, `${label} cannot be changed. Delete and re-create the record instead.`);
+    }
   }
 
   const { $set, $unset } = splitPayload(data as Record<string, unknown>);
@@ -132,7 +178,7 @@ export async function updateRecord<T extends BaseDoc>(
     { returnDocument: "after" },
   );
   if (!after) throw new ConflictError("Someone else changed this record after you opened it. Reload and try again.");
-  await writeAudit({ user, action: "update", entity, entityId: id, chassisNumber: data.chassisNumber, before: existing, after });
+  await writeAudit({ user, action: "update", entity, entityId: id, chassisNumber: existing.chassisNumber, before: existing, after });
 }
 
 export async function deleteRecord<T extends BaseDoc>(
@@ -140,7 +186,7 @@ export async function deleteRecord<T extends BaseDoc>(
   entity: AuditEntity,
   id: string,
   expectedVersion: number,
-  user: CurrentUser,
+  user: Actor,
 ): Promise<void> {
   const raw = col as unknown as Collection<Document>;
   const _id = toObjectId(id);

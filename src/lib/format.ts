@@ -29,6 +29,33 @@ export function formatDate(d: Date | undefined | null): string {
   return d ? dateFmt.format(d) : "—";
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** dd-mm-yyyy (the business's default date format). Accepts a Date or yyyy-mm-dd. */
+export function formatDay(d: Date | string | undefined | null): string {
+  if (!d) return "—";
+  const iso = typeof d === "string" ? d : d.toISOString().slice(0, 10);
+  const [y, m, day] = iso.split("-");
+  return `${day}-${m}-${y}`;
+}
+
+/** Mmm-yy, e.g. Apr-26 (the alternate format, toggled by clicking a date). */
+export function formatMonth(d: Date | string | undefined | null): string {
+  if (!d) return "—";
+  const iso = typeof d === "string" ? d : d.toISOString().slice(0, 10);
+  const [y, m] = iso.split("-");
+  return `${MONTHS[Number(m) - 1]}-${y.slice(2)}`;
+}
+
+/** Basis points → "3.5" for a percentage input. */
+export function bpToInput(bp: number | undefined | null): string {
+  return bp === undefined || bp === null ? "" : String(bp / 100);
+}
+
+export function formatPercent(bp: number | undefined | null): string {
+  return bp === undefined || bp === null ? "—" : `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+}
+
 export function formatDateTime(d: Date | undefined | null): string {
   return d ? dateTimeFmt.format(d) : "—";
 }
